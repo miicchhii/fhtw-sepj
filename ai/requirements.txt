@@ -1,4 +1,5 @@
 ray[rllib]
+ray[tune]
 dm-tree
 gymnasium
 torch

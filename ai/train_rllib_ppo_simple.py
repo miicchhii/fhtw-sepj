@@ -64,7 +64,7 @@ if __name__ == "__main__":
     print("Observation space defined:", OBS_SPACE)
     print("Action space defined:", ACT_SPACE)
 
-    # Create a test env to verify it works
+    # Create a test environment to verify connection to Godot
     test_env = GodotRTSMultiAgentEnv({
         "host": "127.0.0.1",
         "port": 5555,
@@ -72,10 +72,10 @@ if __name__ == "__main__":
     })
     print("Test environment created successfully")
     test_obs, test_info = test_env.reset()
-    print(f"Test reset successful, agents: {list(test_obs.keys())}")
+    print(f"Test reset successful, connected to {len(test_obs)} agents: {list(test_obs.keys())}")
     test_env.close()
 
-    # PPO configuration - simplified for debugging with high entropy for unbiased exploration
+    # PPO configuration for single-worker multi-agent RTS training
     cfg = (
         PPOConfig()
         .api_stack(
@@ -87,14 +87,13 @@ if __name__ == "__main__":
             env=GodotRTSMultiAgentEnv,
             env_config={
                 "host": "127.0.0.1",
-                "port": 5555,
+                "port": 5555,  # Single Godot instance on port 5555
                 "timeout": 5,
             },
-            # Explicitly disable some features that might interfere
             disable_env_checking=True,
         )
         .env_runners(
-            num_env_runners=1,  # Single worker for debugging
+            num_env_runners=1,  # 3 workers for faster training
             num_envs_per_env_runner=1,
             # CRITICAL: Use complete_episodes mode for proper episode handling
             batch_mode="complete_episodes",
@@ -104,9 +103,9 @@ if __name__ == "__main__":
         .training(
             gamma=0.99,
             lr=3e-3,
-            # Train batch must be multiple of rollout fragment
-            train_batch_size=400,  # 2 episodes worth (2400*2)
-            minibatch_size=200,   # 1 episode worth
+            # Train batch size for single worker setup
+            train_batch_size=400,  # Single worker collecting 400 timesteps
+            minibatch_size=200,   # Half of train batch for gradient updates
             num_epochs=10,
             clip_param=0.2,
             vf_clip_param=10.0,
@@ -125,20 +124,20 @@ if __name__ == "__main__":
             }
         )
         .multi_agent(
-            policies={"infantry"},  # Only need policy names for new API
+            policies={"infantry"},  # Single shared policy for all RTS units
             policy_mapping_fn=policy_mapping_fn,
-            # CRITICAL: Count steps by agent steps, not env steps
+            # Count by agent steps for proper multi-agent metrics
             count_steps_by="agent_steps",
         )
         .resources(
             num_gpus=0,
-            num_cpus_for_main_process=1,
+            num_cpus_for_main_process=1,  # Single worker setup
         )
         .reporting(
-            # Report at episode granularity
+            # Report metrics at episode granularity for single worker
             metrics_num_episodes_for_smoothing=1,
             min_time_s_per_iteration=0,
-            min_sample_timesteps_per_iteration=400,  # At least 2 episodes to match train_batch_size
+            min_sample_timesteps_per_iteration=400,  # Match train_batch_size for single worker
         )
         .debugging(
             log_level="INFO",

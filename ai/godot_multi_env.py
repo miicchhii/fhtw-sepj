@@ -9,14 +9,16 @@ from typing import Dict, Any, Tuple, Optional
 
 class GodotRTSMultiAgentEnv(MultiAgentEnv):
     """
-    Multi-agent environment that connects to Godot via TCP socket.
-    Compatible with RLLib's new API stack.
+    Multi-agent environment that connects to a single Godot RTS game instance via TCP socket.
+    Uses Ray RLlib's new API stack with single worker configuration for stable training.
+    Manages 20 RTS units as individual agents in a shared environment.
     """
 
     def __init__(self, env_config: Dict[str, Any]):
         super().__init__()
         self.host = env_config.get("host", "127.0.0.1")
         self.port = env_config.get("port", 5555)
+        print(f"GodotRTSMultiAgentEnv: Connecting to Godot RTS game at {self.host}:{self.port}")
         self.timeout = env_config.get("timeout", 2.0)
         self.ep_horizon = env_config.get("ep_horizon", 50)
         self.step_len = env_config.get("step_len", 10.0)
