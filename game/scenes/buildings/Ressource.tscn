@@ -1,0 +1,49 @@
+[gd_scene load_steps=7 format=3 uid="uid://d1ycj2660jnj2"]
+
+[ext_resource type="Script" uid="uid://u3884003p3cw" path="res://scripts/buildings/ressource.gd" id="1_ahymo"]
+[ext_resource type="Texture2D" uid="uid://c67fv2ppdbcqg" path="res://RTSAssets/ressource.png" id="2_e08dl"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1q7h5"]
+size = Vector2(8.5, 6.5)
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_n1h6l"]
+radius = 9.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_p5vms"]
+bg_color = Color(2.2140146e-06, 0.69625986, 0.61566794, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1h3up"]
+bg_color = Color(0.8599363, 0.49973404, 0, 1)
+
+[node name="Ressource" type="StaticBody2D"]
+script = ExtResource("1_ahymo")
+
+[node name="Ressource" type="Sprite2D" parent="."]
+position = Vector2(0, -6)
+scale = Vector2(0.037499998, 0.037499998)
+texture = ExtResource("2_e08dl")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, -5)
+shape = SubResource("RectangleShape2D_1q7h5")
+
+[node name="miningArea" type="Area2D" parent="CollisionShape2D"]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="CollisionShape2D/miningArea"]
+shape = SubResource("CircleShape2D_n1h6l")
+
+[node name="ProgressBar" type="ProgressBar" parent="."]
+offset_left = -7.0
+offset_top = -18.0
+offset_right = 7.25
+offset_bottom = -15.0
+theme_override_styles/background = SubResource("StyleBoxFlat_p5vms")
+theme_override_styles/fill = SubResource("StyleBoxFlat_1h3up")
+value = 50.0
+show_percentage = false
+
+[node name="Timer" type="Timer" parent="."]
+
+[connection signal="body_entered" from="CollisionShape2D/miningArea" to="." method="_on_mining_area_body_entered"]
+[connection signal="body_exited" from="CollisionShape2D/miningArea" to="." method="_on_mining_area_body_exited"]
+[connection signal="timeout" from="Timer" to="." method="_on_timer_timeout"]

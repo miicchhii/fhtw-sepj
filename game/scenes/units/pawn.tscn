@@ -1,8 +1,8 @@
 [gd_scene load_steps=9 format=3 uid="uid://1eo50gfnka13"]
 
-[ext_resource type="Script" uid="uid://cr3svbdyybl2q" path="res://pawn.gd" id="1_o6oh4"]
-[ext_resource type="Texture2D" uid="uid://d08oaxomtengn" path="res://RTSAssets/stand.png" id="2_augvb"]
-[ext_resource type="Texture2D" uid="uid://d4bosjhg4k1ec" path="res://RTSAssets/run.png" id="3_p2eup"]
+[ext_resource type="Script" uid="uid://cr3svbdyybl2q" path="res://scripts/units/pawn.gd" id="1_mhp1l"]
+[ext_resource type="Texture2D" uid="uid://d08oaxomtengn" path="res://RTSAssets/stand.png" id="2_fbw5j"]
+[ext_resource type="Texture2D" uid="uid://d4bosjhg4k1ec" path="res://RTSAssets/run.png" id="3_xbl4s"]
 
 [sub_resource type="Animation" id="Animation_hq71w"]
 length = 0.001
@@ -78,7 +78,7 @@ _data = {
 radius = 23.0217
 
 [node name="Pawn" type="CharacterBody2D"]
-script = ExtResource("1_o6oh4")
+script = ExtResource("1_mhp1l")
 
 [node name="AnimationPlayer" type="AnimationPlayer" parent="."]
 root_node = NodePath("../idle")
@@ -91,11 +91,11 @@ shape = SubResource("CircleShape2D_augvb")
 one_way_collision_margin = 0.0
 
 [node name="idle" type="Sprite2D" parent="."]
-texture = ExtResource("2_augvb")
+texture = ExtResource("2_fbw5j")
 vframes = 5
 
 [node name="running" type="Sprite2D" parent="."]
 visible = false
-texture = ExtResource("3_p2eup")
+texture = ExtResource("3_xbl4s")
 hframes = 6
 vframes = 5
