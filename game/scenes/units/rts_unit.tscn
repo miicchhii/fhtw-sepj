@@ -1,8 +1,9 @@
-[gd_scene load_steps=11 format=3 uid="uid://cqxpodnnrknx7"]
+[gd_scene load_steps=15 format=3 uid="uid://cqxpodnnrknx7"]
 
 [ext_resource type="Script" uid="uid://blf1vllsiq6u7" path="res://scripts/units/RTSUnit.gd" id="1_twhwq"]
 [ext_resource type="Texture2D" uid="uid://d08oaxomtengn" path="res://RTSAssets/stand.png" id="2_7cimi"]
 [ext_resource type="Texture2D" uid="uid://d4bosjhg4k1ec" path="res://RTSAssets/run.png" id="3_h7vdh"]
+[ext_resource type="Texture2D" uid="uid://bnxyfa5x1mooo" path="res://RTSAssets/Robot_fire.png" id="4_lqysx"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_tf0sc"]
 size = Vector2(18, 53)
@@ -49,6 +50,18 @@ tracks/2/path = NodePath("running:frame")
 tracks/2/interp = 1
 tracks/2/loop_wrap = true
 tracks/2/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 1,
+"values": [1]
+}
+tracks/3/type = "value"
+tracks/3/imported = false
+tracks/3/enabled = true
+tracks/3/path = NodePath("Attack:frame")
+tracks/3/interp = 1
+tracks/3/loop_wrap = true
+tracks/3/keys = {
 "times": PackedFloat32Array(0),
 "transitions": PackedFloat32Array(1),
 "update": 1,
@@ -108,13 +121,37 @@ tracks/0/keys = {
 "values": [0, 1, 2, 3, 4, 5]
 }
 
+[sub_resource type="Animation" id="Animation_vome1"]
+resource_name = "Attack"
+length = 0.5
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Attack:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.099999994, 0.19999999, 0.3),
+"transitions": PackedFloat32Array(1, 1, 1, 1),
+"update": 1,
+"values": [0, 1, 2, 3]
+}
+
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_4c16a"]
 _data = {
+&"Attack": SubResource("Animation_vome1"),
 &"RESET": SubResource("Animation_hq71w"),
 &"Walk": SubResource("Animation_tf0sc"),
 &"idle": SubResource("Animation_p2eup"),
 &"running": SubResource("Animation_is2gf")
 }
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lqysx"]
+bg_color = Color(2.2140146e-06, 0.69625986, 0.61566794, 1)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vome1"]
+bg_color = Color(0.8599363, 0.49973404, 0, 1)
 
 [node name="RTSUnit" type="CharacterBody2D"]
 script = ExtResource("1_twhwq")
@@ -135,6 +172,14 @@ hframes = 6
 vframes = 5
 frame = 1
 
+[node name="Attack" type="Sprite2D" parent="."]
+visible = false
+position = Vector2(4.000003, -1.0000005)
+scale = Vector2(1.7708334, 1.7708334)
+texture = ExtResource("4_lqysx")
+hframes = 4
+frame = 1
+
 [node name="Box" type="Panel" parent="."]
 offset_left = -12.999996
 offset_top = -32.0
@@ -148,3 +193,13 @@ metadata/_edit_use_anchors_ = true
 libraries = {
 &"": SubResource("AnimationLibrary_4c16a")
 }
+
+[node name="HPBar" type="ProgressBar" parent="."]
+offset_left = -11.0
+offset_top = -37.0
+offset_right = 12.0
+offset_bottom = -34.0
+theme_override_styles/background = SubResource("StyleBoxFlat_lqysx")
+theme_override_styles/fill = SubResource("StyleBoxFlat_vome1")
+value = 50.0
+show_percentage = false

@@ -114,6 +114,9 @@ y_sort_enabled = true
 [node name="RTSUnit7" parent="Units2" instance=ExtResource("3_v5dby")]
 position = Vector2(415, 365)
 
+[node name="RTSUnit8" parent="Units2" instance=ExtResource("3_v5dby")]
+position = Vector2(424, 440)
+
 [node name="Objects" type="Node2D" parent="."]
 y_sort_enabled = true
 position = Vector2(-1, 12)
@@ -132,3 +135,17 @@ y_sort_enabled = true
 [node name="robo_shop" parent="Houses" instance=ExtResource("7_bq33v")]
 position = Vector2(184, 211.00002)
 scale = Vector2(1.6039534, 1.6039534)
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="RTSUnit8" parent="Enemies" instance=ExtResource("3_v5dby")]
+position = Vector2(1077, 295)
+is_enemy = true
+
+[node name="RTSUnit9" parent="Enemies" instance=ExtResource("3_v5dby")]
+position = Vector2(1071, 182)
+is_enemy = true
+
+[node name="RTSUnit10" parent="Enemies" instance=ExtResource("3_v5dby")]
+position = Vector2(694, 379)
+is_enemy = true
