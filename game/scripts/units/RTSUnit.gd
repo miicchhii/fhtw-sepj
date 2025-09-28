@@ -19,8 +19,8 @@ var target: Vector2
 
 func _ready() -> void:
 	set_selected(selected)
+	add_to_group("units", true)
 	hp = max_hp
-	add_to_group("units")
 	target = global_position
 
 func set_move_target(p: Vector2) -> void:

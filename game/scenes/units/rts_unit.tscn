@@ -55,6 +55,23 @@ tracks/2/keys = {
 "values": [1]
 }
 
+[sub_resource type="Animation" id="Animation_tf0sc"]
+resource_name = "Walk"
+length = 0.7
+loop_mode = 1
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("running:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0, 0.13333334, 0.3, 0.4666667, 0.56666666, 0.6666667),
+"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1),
+"update": 1,
+"values": [1, 2, 3, 4, 5, 1]
+}
+
 [sub_resource type="Animation" id="Animation_p2eup"]
 resource_name = "idle"
 length = 2.0
@@ -91,23 +108,6 @@ tracks/0/keys = {
 "values": [0, 1, 2, 3, 4, 5]
 }
 
-[sub_resource type="Animation" id="Animation_tf0sc"]
-resource_name = "Walk"
-length = 0.7
-loop_mode = 1
-tracks/0/type = "value"
-tracks/0/imported = false
-tracks/0/enabled = true
-tracks/0/path = NodePath("running:frame")
-tracks/0/interp = 1
-tracks/0/loop_wrap = true
-tracks/0/keys = {
-"times": PackedFloat32Array(0, 0.13333334, 0.3, 0.4666667, 0.56666666, 0.6666667),
-"transitions": PackedFloat32Array(1, 1, 1, 1, 1, 1),
-"update": 1,
-"values": [1, 2, 3, 4, 5, 1]
-}
-
 [sub_resource type="AnimationLibrary" id="AnimationLibrary_4c16a"]
 _data = {
 &"RESET": SubResource("Animation_hq71w"),
@@ -116,7 +116,7 @@ _data = {
 &"running": SubResource("Animation_is2gf")
 }
 
-[node name="RTSUnit" type="CharacterBody2D" groups=["units"]]
+[node name="RTSUnit" type="CharacterBody2D"]
 script = ExtResource("1_twhwq")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]

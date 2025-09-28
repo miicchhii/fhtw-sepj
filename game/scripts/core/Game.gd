@@ -12,10 +12,15 @@ var max_episode_steps: int = 200  # Longer episodes for better learning feedback
 var units = []
 
 func _ready() -> void:
-	units = get_tree().get_nodes_in_group("units")
+	get_units()
+	
 	# IMPORTANT: Add this node to the "game" group so AiServer can find it
 	add_to_group("game")
 	print("Game: Added to 'game' group")
+
+func get_units():
+	units = null
+	units = get_tree().get_nodes_in_group("units")
 
 func _physics_process(delta: float) -> void:
 	tick += 1
