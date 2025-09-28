@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://thu4rg7uqytk" path="res://scripts/core/Game.gd" id="1_1fp7r"]
 [ext_resource type="Texture2D" uid="uid://47p4cy0ufs86" path="res://RTSAssets/ground.png" id="2_6m72w"]
-[ext_resource type="Script" path="res://scripts/ui/camera.gd" id="2_v5dby"]
+[ext_resource type="Script" uid="uid://b5gh4c1egnp25" path="res://scripts/ui/camera.gd" id="2_v5dby"]
 [ext_resource type="PackedScene" uid="uid://dg8jjjtik1cqu" path="res://scenes/ui/UI_new.tscn" id="3_bq33v"]
 [ext_resource type="PackedScene" uid="uid://cqxpodnnrknx7" path="res://scenes/units/rts_unit.tscn" id="3_v5dby"]
 [ext_resource type="PackedScene" uid="uid://cu4ecfavbqal7" path="res://scenes/units/Unit2.tscn" id="5_v5dby"]
@@ -22,6 +22,7 @@ sources/0 = SubResource("TileSetAtlasSource_fj7yv")
 script = ExtResource("1_1fp7r")
 
 [node name="Camera" type="Camera2D" parent="."]
+position = Vector2(632, 366)
 limit_left = 0
 limit_top = 0
 script = ExtResource("2_v5dby")
