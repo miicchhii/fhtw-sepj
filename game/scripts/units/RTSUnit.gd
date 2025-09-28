@@ -39,7 +39,8 @@ func _ready() -> void:
 		set_selected(selected)
 		# tint enemy red
 		modulate = Color(1.0, 0.314, 0.335, 1.0)   # light red shade
-	# keep the rest of your existing _ready() content
+	else:
+		add_to_group("ally")
 	_update_hp_bar()
 	
 	set_selected(selected)
@@ -109,6 +110,29 @@ func _physics_process(delta):
 					if has_node("AnimationPlayer"):
 						$AnimationPlayer.play("Attack") # ok if missing
 					_atk_cd = attack_cooldown
+	
+		# --- Enemy units: attack ONLY when an ally is already in range ---
+	if is_enemy:
+		# clear invalid target
+		if attack_target and not is_instance_valid(attack_target):
+			attack_target = null
+
+		# acquire a target only if it's already inside attack_range
+		if attack_target == null:
+			attack_target = _pick_ally_in_range(attack_range)
+
+		if attack_target:
+			var d := position.distance_to(attack_target.global_position)
+			if d > attack_range:
+				attack_target = null             # do not chase
+			else:
+				_atk_cd -= delta
+				if _atk_cd <= 0.0:
+					if is_instance_valid(attack_target) and attack_target.has_method("apply_damage"):
+						attack_target.apply_damage(attack_damage)
+					if has_node("AnimationPlayer"):
+						$AnimationPlayer.play("Attack")
+					_atk_cd = attack_cooldown
 
 		
 		
@@ -129,6 +153,18 @@ func _pick_enemy_in_range(radius: float) -> Node:
 	var best: Node = null
 	var best_d: float = INF
 	for n in get_tree().get_nodes_in_group("enemy"):
+		if not is_instance_valid(n):
+			continue
+		var d := position.distance_to(n.global_position)
+		if d <= radius and d < best_d:
+			best = n
+			best_d = d
+	return best
+	
+func _pick_ally_in_range(radius: float) -> Node:
+	var best: Node = null
+	var best_d: float = INF
+	for n in get_tree().get_nodes_in_group("ally"):
 		if not is_instance_valid(n):
 			continue
 		var d := position.distance_to(n.global_position)

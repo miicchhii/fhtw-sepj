@@ -147,21 +147,35 @@ func _ai_request_reset() -> void:
 
 func _on_area_selected(object):
 	var start = object.start
-	var end = object.end
-	var area = []
-	area.append(Vector2(min(start.x, end.x), min(start.y, end.y)))
-	area.append(Vector2(max(start.x, end.x), max(start.y, end.y)))
-	var ut = get_units_in_area(area)
-	for u in units:
-		u.set_selected(false)
+	var end   = object.end
+
+	var a0 = Vector2(min(start.x, end.x), min(start.y, end.y))
+	var a1 = Vector2(max(start.x, end.x), max(start.y, end.y))
+
+	var ut = get_units_in_area([a0, a1])   # your area query that reads from "ally"
+
+	# 1) Deselect all *live* allies
+	for u in get_tree().get_nodes_in_group("ally"):
+		if u != null and is_instance_valid(u) and u.has_method("set_selected"):
+			u.set_selected(false)
+
+	# 2) Select the ones inside the area
 	for u in ut:
-		u.set_selected(!u.selected)
+		if u != null and is_instance_valid(u) and u.has_method("set_selected"):
+			u.set_selected(true)   # or toggle if you prefer
+
 	
 	
-func get_units_in_area(area):
-	var u = []
-	for unit in units:
-		if unit.position.x > area[0].x and unit.position.x < area[1].x:
-			if unit.position.y > area[0].y and unit.position.y < area[1].y:
-				u.append(unit)
-	return u
+func get_units_in_area(area: Array) -> Array:
+	# area[0] and area[1] might be any corners; normalize first
+	var a0 := Vector2(min(area[0].x, area[1].x), min(area[0].y, area[1].y))
+	var a1 := Vector2(max(area[0].x, area[1].x), max(area[0].y, area[1].y))
+
+	var selected: Array = []
+	for unit in get_tree().get_nodes_in_group("ally"):
+		if unit == null or not is_instance_valid(unit):
+			continue
+		var p: Vector2 = unit.global_position
+		if p.x >= a0.x and p.x <= a1.x and p.y >= a0.y and p.y <= a1.y:
+			selected.append(unit)
+	return selected
