@@ -22,3 +22,8 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_m01cm")
 [node name="Label" type="Label" parent="."]
 offset_right = 40.0
 offset_bottom = 23.0
+
+[node name="Label2" type="Label" parent="."]
+offset_top = 23.0
+offset_right = 40.0
+offset_bottom = 46.0

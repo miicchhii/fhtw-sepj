@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3 uid="uid://ec25jx2deodc"]
+[gd_scene load_steps=11 format=3 uid="uid://ec25jx2deodc"]
 
 [ext_resource type="Script" uid="uid://thu4rg7uqytk" path="res://scripts/core/Game.gd" id="1_1fp7r"]
 [ext_resource type="Texture2D" uid="uid://47p4cy0ufs86" path="res://RTSAssets/ground.png" id="2_6m72w"]
@@ -7,6 +7,7 @@
 [ext_resource type="PackedScene" uid="uid://cqxpodnnrknx7" path="res://scenes/units/rts_unit.tscn" id="3_v5dby"]
 [ext_resource type="PackedScene" uid="uid://d1ycj2660jnj2" path="res://scenes/buildings/Ressource.tscn" id="6_t5ptc"]
 [ext_resource type="PackedScene" uid="uid://c07cbcpoyy42e" path="res://scenes/buildings/robo_shop.tscn" id="7_bq33v"]
+[ext_resource type="PackedScene" uid="uid://boyahnaa6uv03" path="res://scenes/buildings/coinHouse.tscn" id="7_j2gmx"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_fj7yv"]
 texture = ExtResource("2_6m72w")
@@ -111,19 +112,23 @@ collision_layer = 0
 y_sort_enabled = true
 
 [node name="RTSUnit7" parent="Units2" instance=ExtResource("3_v5dby")]
-position = Vector2(769, 446)
+position = Vector2(415, 365)
 
 [node name="Objects" type="Node2D" parent="."]
 y_sort_enabled = true
 position = Vector2(-1, 12)
 
 [node name="Ressource" parent="Objects" instance=ExtResource("6_t5ptc")]
-position = Vector2(846.99994, 264)
+position = Vector2(639, 208)
 scale = Vector2(4.92, 4.92)
+
+[node name="coinHouse" parent="Objects" instance=ExtResource("7_j2gmx")]
+position = Vector2(177.00002, 476.00003)
+scale = Vector2(5.08, 5.08)
 
 [node name="Houses" type="Node2D" parent="."]
 y_sort_enabled = true
 
 [node name="robo_shop" parent="Houses" instance=ExtResource("7_bq33v")]
-position = Vector2(362, 339.99997)
+position = Vector2(285, 274)
 scale = Vector2(1.6039534, 1.6039534)
