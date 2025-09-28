@@ -4,6 +4,11 @@ extends Node2D
 var housePos = Vector2(300,300)
 
 func _on_yes_pressed() -> void:
+	var unitCost = 10
+	if Global.Coin < unitCost:
+		return
+	Global.Coin -= unitCost
+	
 	var rng = RandomNumberGenerator.new()
 	rng.randomize()
 	var randomPosX = rng.randi_range(-100,100)

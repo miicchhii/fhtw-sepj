@@ -4,7 +4,7 @@
 [ext_resource type="Texture2D" uid="uid://dd34kh8itbmb5" path="res://RTSAssets/robo_shop.png" id="1_pitd8"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_fciky"]
-size = Vector2(96, 77)
+size = Vector2(87, 94)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tf0sc"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
@@ -20,7 +20,7 @@ input_pickable = true
 script = ExtResource("1_fciky")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2(-1, -38.5)
+position = Vector2(-0.5, -47)
 shape = SubResource("RectangleShape2D_fciky")
 
 [node name="RoboShop" type="Sprite2D" parent="."]

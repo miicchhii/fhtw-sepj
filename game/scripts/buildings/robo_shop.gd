@@ -4,6 +4,7 @@ var mouseEntered = false
 @onready var select = get_node("Selected")
 var Selected = false
 
+var unitCost = 10
 
 func _process(delta):
 	select.visible = Selected
