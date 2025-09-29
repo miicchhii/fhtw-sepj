@@ -65,15 +65,15 @@ if __name__ == "__main__":
     print("Action space defined:", ACT_SPACE)
 
     # Create a test environment to verify connection to Godot
-    test_env = GodotRTSMultiAgentEnv({
-        "host": "127.0.0.1",
-        "port": 5555,
-        "timeout": 5,
-    })
-    print("Test environment created successfully")
-    test_obs, test_info = test_env.reset()
-    print(f"Test reset successful, connected to {len(test_obs)} agents: {list(test_obs.keys())}")
-    test_env.close()
+    # test_env = GodotRTSMultiAgentEnv({
+    #     "host": "127.0.0.1",
+    #     "port": 5555,
+    #     "timeout": 5,
+    # })
+    # print("Test environment created successfully")
+    # test_obs, test_info = test_env.reset()
+    # print(f"Test reset successful, connected to {len(test_obs)} agents: {list(test_obs.keys())}")
+    # test_env.close()
 
     # PPO configuration for single-worker multi-agent RTS training
     cfg = (
@@ -93,19 +93,19 @@ if __name__ == "__main__":
             disable_env_checking=True,
         )
         .env_runners(
-            num_env_runners=1,  # 3 workers for faster training
+            num_env_runners=0,  # 3 workers for faster training
             num_envs_per_env_runner=1,
             # CRITICAL: Use complete_episodes mode for proper episode handling
             batch_mode="complete_episodes",
             # With 12 agents and 200 steps per episode = 2400 total timesteps per episode
-            rollout_fragment_length=200,  # 200 steps * 12 agents = 2400 timesteps
+            rollout_fragment_length=100,  # 200 steps * 12 agents = 2400 timesteps
         )
         .training(
             gamma=0.99,
             lr=3e-3,
             # Train batch size for single worker setup
-            train_batch_size=400,  # Single worker collecting 400 timesteps
-            minibatch_size=200,   # Half of train batch for gradient updates
+            train_batch_size=200,  # Single worker collecting 400 timesteps
+            minibatch_size=100,   # Half of train batch for gradient updates
             num_epochs=10,
             clip_param=0.2,
             vf_clip_param=10.0,
@@ -131,16 +131,16 @@ if __name__ == "__main__":
         )
         .resources(
             num_gpus=0,
-            num_cpus_for_main_process=1,  # Single worker setup
+            num_cpus_for_main_process=4,  # Single worker setup
         )
         .reporting(
             # Report metrics at episode granularity for single worker
             metrics_num_episodes_for_smoothing=1,
             min_time_s_per_iteration=0,
-            min_sample_timesteps_per_iteration=400,  # Match train_batch_size for single worker
+            min_sample_timesteps_per_iteration=100,  # Match train_batch_size for single worker
         )
         .debugging(
-            log_level="INFO",
+            log_level="DEBUG",
         )
     )
 

@@ -15,7 +15,7 @@ func _ready() -> void:
 	timer.start()
 
 # Called every frame. 'delta' is the elapsed time since the previous frame.
-func _process(delta):
+func _process(_delta):
 	if currTime <= 0:
 		coinsCollected()
 

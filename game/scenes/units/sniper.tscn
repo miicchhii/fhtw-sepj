@@ -1,6 +1,6 @@
-[gd_scene load_steps=15 format=3 uid="uid://cqxpodnnrknx7"]
+[gd_scene load_steps=15 format=3 uid="uid://dhc3tuntxaugs"]
 
-[ext_resource type="Script" uid="uid://blf1vllsiq6u7" path="res://scripts/units/RTSUnit.gd" id="1_twhwq"]
+[ext_resource type="Script" uid="uid://114gu03cjaax" path="res://scripts/units/Sniper.gd" id="1_twhwq"]
 [ext_resource type="Texture2D" uid="uid://d08oaxomtengn" path="res://RTSAssets/stand.png" id="2_7cimi"]
 [ext_resource type="Texture2D" uid="uid://d4bosjhg4k1ec" path="res://RTSAssets/run.png" id="3_h7vdh"]
 [ext_resource type="Texture2D" uid="uid://bnxyfa5x1mooo" path="res://RTSAssets/Robot_fire.png" id="4_lqysx"]
@@ -153,7 +153,8 @@ bg_color = Color(2.21401e-06, 0.69626, 0.615668, 1)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vome1"]
 bg_color = Color(0.859936, 0.499734, 0, 1)
 
-[node name="Infantry" type="CharacterBody2D"]
+[node name="Sniper" type="CharacterBody2D"]
+modulate = Color(0.5, 0.5, 0.7, 1)
 collision_layer = 524288
 script = ExtResource("1_twhwq")
 

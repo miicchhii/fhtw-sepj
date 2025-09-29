@@ -10,17 +10,17 @@ size = Vector2(8.5, 6.5)
 radius = 9.0
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_p5vms"]
-bg_color = Color(2.2140146e-06, 0.69625986, 0.61566794, 1)
+bg_color = Color(2.21401e-06, 0.69626, 0.615668, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1h3up"]
-bg_color = Color(0.8599363, 0.49973404, 0, 1)
+bg_color = Color(0.859936, 0.499734, 0, 1)
 
 [node name="Ressource" type="StaticBody2D"]
 script = ExtResource("1_ahymo")
 
 [node name="Ressource" type="Sprite2D" parent="."]
 position = Vector2(0, -6)
-scale = Vector2(0.037499998, 0.037499998)
+scale = Vector2(0.0375, 0.0375)
 texture = ExtResource("2_e08dl")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
@@ -28,6 +28,7 @@ position = Vector2(0, -5)
 shape = SubResource("RectangleShape2D_1q7h5")
 
 [node name="miningArea" type="Area2D" parent="CollisionShape2D"]
+collision_mask = 524288
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="CollisionShape2D/miningArea"]
 shape = SubResource("CircleShape2D_n1h6l")

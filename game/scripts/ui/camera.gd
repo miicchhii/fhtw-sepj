@@ -21,7 +21,7 @@ var end = Vector2()
 var endV = Vector2()
 var isDragging = false
 signal area_selected()
-signal start_move_selection
+#signal start_move_selection
 
 @onready var box = get_node("../UI/Panel")
 

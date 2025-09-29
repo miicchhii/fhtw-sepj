@@ -6,7 +6,7 @@ var Selected = false
 
 var unitCost = 10
 
-func _process(delta):
+func _process(_delta):
 	select.visible = Selected
 
 func _input(event):

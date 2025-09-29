@@ -7,12 +7,13 @@
 size = Vector2(20, 16)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_p5vms"]
-bg_color = Color(2.2140146e-06, 0.69625986, 0.61566794, 1)
+bg_color = Color(2.21401e-06, 0.69626, 0.615668, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1h3up"]
-bg_color = Color(0.8599363, 0.49973404, 0, 1)
+bg_color = Color(0.859936, 0.499734, 0, 1)
 
 [node name="coinHouse" type="StaticBody2D"]
+collision_layer = 0
 script = ExtResource("1_xorlt")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
@@ -34,8 +35,8 @@ show_percentage = false
 wait_time = 0.1
 
 [node name="Bank" type="Sprite2D" parent="."]
-position = Vector2(1, -9.000001)
-scale = Vector2(0.17267114, 0.17267114)
+position = Vector2(1, -9)
+scale = Vector2(0.172671, 0.172671)
 texture = ExtResource("1_8c8mn")
 
 [connection signal="timeout" from="Timer" to="." method="_on_timer_timeout"]

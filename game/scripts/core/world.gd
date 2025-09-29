@@ -2,9 +2,6 @@ extends Node2D
 
 var units = []
 
-func _ready():
-	units = get_tree().get_nodes_in_group("units")
-
 func _on_area_selected(object):
 	var start = object.start
 	var end = object.end
