@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3 uid="uid://c0icukbwfygok"]
+
+[ext_resource type="Script" uid="uid://8x6ny5l0pqpg" path="res://scripts/global/POP.gd" id="1_8p8cv"]
+
+[node name="POP" type="Label"]
+offset_left = -11.000001
+offset_top = -16.000002
+offset_right = 29.0
+offset_bottom = 6.999998
+scale = Vector2(0.27999997, 0.27999997)
+script = ExtResource("1_8p8cv")

@@ -29,7 +29,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
 
         # Agent tracking
         self.agents = set()
-        self.possible_agents = ["u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12", "u13", "u14", "u15", "u16", "u17", "u18", "u19", "u20"]  # Pre-define possible agents
+        self.possible_agents = [f"u{i}" for i in range(1, 1001)]  # Pre-define possible agents u1 to u100
         self.last_obs = {}
 
         # Episode tracking
@@ -37,7 +37,8 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         self.episode_ended = False
 
         # Define spaces (these should match your actual observation/action spaces)
-        self.observation_space = Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32)
+        # New observation space: base(4) + battle_stats(5) + closest_allies(10*4) + closest_enemies(10*4) = 89 values
+        self.observation_space = Box(low=-1.0, high=10.0, shape=(89,), dtype=np.float32)  # Increased upper bound for distances
         self.action_space = Discrete(9)
 
         # Multi-agent spaces - initialize with possible agents
@@ -130,27 +131,41 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             else:
                 self.socket.settimeout(self.timeout)
 
-            # Read until we get a newline
-            buffer = ""
-            while True:
+            # Initialize or use existing buffer
+            if not hasattr(self, '_receive_buffer'):
+                self._receive_buffer = ""
+
+            # Read data and accumulate in buffer
+            while '\n' not in self._receive_buffer:
                 chunk = self.socket.recv(1024).decode('utf-8')
                 if not chunk:
-                    break
-                buffer += chunk
-                if '\n' in buffer:
-                    break
+                    # Connection closed
+                    self.connected = False
+                    return None
+                self._receive_buffer += chunk
 
-            if '\n' not in buffer:
+            # Extract the first complete message
+            lines = self._receive_buffer.split('\n', 1)
+            if len(lines) < 2:
                 return None
 
-            # Take the first complete line
-            line = buffer.split('\n')[0].strip()
-            if not line:
-                return None
+            message_line = lines[0].strip()
+            # Keep remaining data for next message
+            self._receive_buffer = lines[1] if len(lines) > 1 else ""
 
-            return json.loads(line)
+            if not message_line:
+                # Empty line, try again
+                return self._receive_message(timeout)
+
+            return json.loads(message_line)
 
         except socket.timeout:
+            return None
+        except json.JSONDecodeError as e:
+            print(f"Error parsing JSON message: {e}")
+            print(f"Problematic message: '{message_line[:100]}...'")
+            # Clear buffer on JSON error and try to recover
+            self._receive_buffer = ""
             return None
         except Exception as e:
             print(f"Error receiving message: {e}")
@@ -175,15 +190,15 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         units = godot_obs.get("units", [])
         map_info = godot_obs.get("map", {"w": 1024, "h": 768})
 
-        # Update agent set
-        self.agents = set()
+        # Track current agents from Godot
+        current_agents = set()
 
         for unit in units:
             agent_id = unit.get("id", "")
             if not agent_id:
                 continue
 
-            self.agents.add(agent_id)
+            current_agents.add(agent_id)
 
             # Convert unit data to normalized observation vector
             pos = unit.get("pos", [0, 0])
@@ -197,9 +212,52 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             center_x, center_y = 0.5, 0.5
             dist_to_center = np.sqrt((norm_x - center_x)**2 + (norm_y - center_y)**2)
 
-            observations[agent_id] = np.array([
-                norm_x, norm_y, hp_ratio, dist_to_center
-            ], dtype=np.float32)
+            # Build observation vector: base info + battle stats + closest allies + closest enemies
+            obs_vector = [norm_x, norm_y, hp_ratio, dist_to_center]
+
+            # Add battle stats (normalized)
+            attack_range = unit.get("attack_range", 64.0)
+            attack_damage = unit.get("attack_damage", 15.0)
+            attack_cooldown = unit.get("attack_cooldown", 0.8)
+            attack_cooldown_remaining = unit.get("attack_cooldown_remaining", 0.0)
+            speed = unit.get("speed", 50.0)
+
+            # Normalize battle stats for better learning
+            norm_attack_range = attack_range / 200.0  # Max expected range around 200
+            norm_attack_damage = attack_damage / 50.0  # Max expected damage around 50
+            norm_attack_cooldown = attack_cooldown / 2.0  # Max expected cooldown around 2s
+            norm_cooldown_remaining = attack_cooldown_remaining / 2.0  # Same as cooldown
+            norm_speed = speed / 100.0  # Max expected speed around 100
+
+            obs_vector.extend([norm_attack_range, norm_attack_damage, norm_attack_cooldown,
+                             norm_cooldown_remaining, norm_speed])
+
+            # Process closest allies (10 units, 4 values each)
+            closest_allies = unit.get("closest_allies", [])
+            max_distance = np.sqrt(map_info["w"]**2 + map_info["h"]**2)
+            for ally_data in closest_allies:
+                direction = ally_data.get("direction", [0.0, 0.0])
+                distance = ally_data.get("distance", 0.0)
+                ally_hp_ratio = ally_data.get("hp_ratio", 0.0)
+
+                # Normalize distance by map diagonal for better scaling
+                norm_distance = distance / max_distance if max_distance > 0 else 0.0
+
+                obs_vector.extend([direction[0], direction[1], norm_distance, ally_hp_ratio])
+
+            # Process closest enemies (10 units, 4 values each)
+            closest_enemies = unit.get("closest_enemies", [])
+            for enemy_data in closest_enemies:
+                direction = enemy_data.get("direction", [0.0, 0.0])
+                distance = enemy_data.get("distance", 0.0)
+                enemy_hp_ratio = enemy_data.get("hp_ratio", 0.0)
+
+                # Normalize distance by map diagonal for better scaling
+                norm_distance = distance / max_distance if max_distance > 0 else 0.0
+
+                obs_vector.extend([direction[0], direction[1], norm_distance, enemy_hp_ratio])
+
+            observations[agent_id] = np.array(obs_vector, dtype=np.float32)
 
             infos[agent_id] = {
                 "raw_pos": pos,
@@ -211,6 +269,27 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             # Update spaces
             self.observation_spaces[agent_id] = self.observation_space
             self.action_spaces[agent_id] = self.action_space
+
+        # Handle dead agents - provide final observation for agents that disappeared
+        dead_agents = self.agents - current_agents
+        for dead_agent in dead_agents:
+            # Give dead agent a zero observation (89 values total - indicating death)
+            dead_obs = [0.0, 0.0, 0.0, 1.0]  # Base observation indicating death
+            # Add 5 zeros for battle stats + 80 zeros for closest allies and enemies (10*4 + 10*4)
+            dead_obs.extend([0.0] * 85)
+            observations[dead_agent] = np.array(dead_obs, dtype=np.float32)
+            infos[dead_agent] = {
+                "raw_pos": [0, 0],
+                "hp": 0,
+                "max_hp": 100,
+                "episode_step": self.episode_step,
+                "dead": True
+            }
+            print(f"Agent {dead_agent} died - providing final observation")
+
+        # Update agent set to include both current and dead agents for this step
+        # This ensures dead agents get their final observation before being removed
+        self.agents = current_agents | dead_agents
 
         return observations, infos
 
@@ -225,7 +304,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         self.episode_ended = False
 
         # Send reset command
-        if not self._send_message({"type": "reset"}):
+        if not self._send_message({"type": "_ai_request_reset"}):
             raise RuntimeError("Failed to send reset command to Godot")
 
         # Wait for initial observation
@@ -245,7 +324,9 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
     def step(self, actions: Dict[str, int]) -> Tuple[Dict[str, np.ndarray], Dict[str, float], Dict[str, bool], Dict[str, bool], Dict[str, Dict]]:
         """Step the environment"""
         if not self.connected:
-            raise RuntimeError("Not connected to Godot")
+            print("Connection lost, attempting to reconnect...")
+            if not self._connect():
+                raise RuntimeError("Not connected to Godot")
 
         # Track episode steps
         self.episode_step += 1
@@ -265,9 +346,9 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             # Map action to movement
             moves = [
                 [0, 0],    # 0: no move
-                [-50, -50], [0, -50], [50, -50],  # 1,2,3: up-left, up, up-right
-                [-50, 0],   [0, 0],   [50, 0],    # 4,5,6: left, stay, right
-                [-50, 50],  [0, 50],  [50, 50]    # 7,8,9: down-left, down, down-right
+                [-100, -100], [0, -100], [100, -100],  # 1,2,3: up-left, up, up-right
+                [-100, 0],   [0, 0],   [100, 0],    # 4,5,6: left, stay, right
+                [-100, 100],  [0, 100],  [100, 100]    # 7,8,9: down-left, down, down-right
             ]
 
             if 0 <= action < len(moves):
@@ -290,13 +371,20 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                 map_h = getattr(self, 'map_info', {"w": 1280, "h": 720})["h"]
                 godot_actions[agent_id] = {"move": [map_w/2, map_h/2]}
 
-        # Send actions
+        # Send actions with retry logic
         if not self._send_message({"type": "act", "actions": godot_actions}):
-            raise RuntimeError("Failed to send actions to Godot")
+            print("Failed to send actions, attempting to reconnect...")
+            if self._connect():
+                if not self._send_message({"type": "act", "actions": godot_actions}):
+                    raise RuntimeError("Failed to send actions to Godot after reconnect")
+            else:
+                raise RuntimeError("Failed to send actions to Godot")
 
         # Wait for observation
         godot_obs = self._wait_for_observation(timeout=3.0)
         if godot_obs is None:
+            print("Failed to receive observation, connection may be lost")
+            self.connected = False
             raise RuntimeError("Failed to receive observation after step")
 
         observations, infos = self._extract_obs_and_agents(godot_obs)
@@ -335,13 +423,30 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             terminateds = {}
             truncateds = {}
 
+            # Track agents that died this step
+            dead_agents_this_step = set()
+            for agent_id in self.agents:
+                if agent_id in infos and infos[agent_id].get("dead", False):
+                    dead_agents_this_step.add(agent_id)
+
             for agent_id in self.agents:
                 # Use the actual reward for each agent
-                rewards[agent_id] = float(agent_rewards.get(agent_id, 0.0))
-                # For multi-agent, individual agents don't terminate
-                terminateds[agent_id] = False
-                # But they do get truncated when episode ends
-                truncateds[agent_id] = global_done
+                reward = float(agent_rewards.get(agent_id, 0.0))
+                rewards[agent_id] = reward
+
+                # Optional: Log significant combat rewards for debugging
+                if abs(reward) > 1.0:  # Log rewards above normal positional range
+                    print(f"Agent {agent_id} received significant reward: {reward:.2f}")
+
+                # Mark dead agents as terminated (not truncated)
+                if agent_id in dead_agents_this_step:
+                    terminateds[agent_id] = True
+                    truncateds[agent_id] = False
+                else:
+                    # Living agents don't terminate individually
+                    terminateds[agent_id] = False
+                    # But they do get truncated when episode ends
+                    truncateds[agent_id] = global_done
 
             # CRITICAL: Set global episode end flags correctly
             # __all__ indicates the entire episode is done
@@ -352,6 +457,12 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             if global_done:
                 self.episode_ended = True
                 print(f"Episode ended at step {self.episode_step}")
+
+            # Remove dead agents from the active agent set for next step
+            # But only after we've processed them for this step
+            self.agents = self.agents - dead_agents_this_step
+            if dead_agents_this_step:
+                print(f"Removed dead agents from active set: {dead_agents_this_step}")
 
             # DEBUG: Log final termination/truncation states
             # print(f"Step {self.episode_step}: Final states - terminateds: {terminateds}, truncateds: {truncateds}")
@@ -367,4 +478,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                 pass
         self.socket = None
         self.connected = False
+        # Clear receive buffer
+        if hasattr(self, '_receive_buffer'):
+            self._receive_buffer = ""
         print("Godot environment closed")

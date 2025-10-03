@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d08oaxomtengn"
-path="res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"
+uid="uid://bo7w8vj4tvfnj"
+path="res://.godot/imported/bank.png-4bd7cf6a567c5bcc462ec26cba280bc5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://RTSAssets/stand.png"
-dest_files=["res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"]
+source_file="res://RTSAssets/bank.png"
+dest_files=["res://.godot/imported/bank.png-4bd7cf6a567c5bcc462ec26cba280bc5.ctex"]
 
 [params]
 

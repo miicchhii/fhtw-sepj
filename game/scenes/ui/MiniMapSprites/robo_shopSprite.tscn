@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://b32gsis3g0leq"]
+
+[ext_resource type="Texture2D" uid="uid://dd34kh8itbmb5" path="res://RTSAssets/robo_shop.png" id="1_hij3t"]
+
+[node name="RoboShop" type="Sprite2D"]
+position = Vector2(7.1525574e-07, 5.722046e-06)
+scale = Vector2(0.047, 0.047)
+texture = ExtResource("1_hij3t")

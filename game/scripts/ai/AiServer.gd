@@ -62,7 +62,7 @@ func _process(_delta: float) -> void:
 func _handle_message(_peer: StreamPeerTCP, msg: Dictionary) -> void:
 	var t: String = str(msg.get("type", ""))
 	match t:
-		"reset":
+		"_ai_request_reset":
 			print("AiServer: got RESET")
 			var game_nodes = get_tree().get_nodes_in_group("game")
 			if game_nodes.size() > 0:
@@ -104,9 +104,9 @@ func _broadcast(obj: Dictionary) -> void:
 				alive += 1
 	
 	# Lightweight debug for obs traffic
-	if str(obj.get("type","")) == "obs":
-		var data: Dictionary = obj.get("data", {}) as Dictionary
-		var units_arr: Array = data.get("units", []) as Array
+	#if str(obj.get("type","")) == "obs":
+		#var data: Dictionary = obj.get("data", {}) as Dictionary
+		#var units_arr: Array = data.get("units", []) as Array
 		#print("AiServer: broadcast OBS -> peers=", alive, " units=", units_arr.size())
 
 func _is_connected(p: StreamPeerTCP) -> bool:

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d08oaxomtengn"
-path="res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"
+uid="uid://c67fv2ppdbcqg"
+path="res://.godot/imported/ressource.png-ed6d45df8245b30d6487a90a130cbb77.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://RTSAssets/stand.png"
-dest_files=["res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"]
+source_file="res://RTSAssets/ressource.png"
+dest_files=["res://.godot/imported/ressource.png-ed6d45df8245b30d6487a90a130cbb77.ctex"]
 
 [params]
 

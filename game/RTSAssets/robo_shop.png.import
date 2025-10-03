@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d08oaxomtengn"
-path="res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"
+uid="uid://dd34kh8itbmb5"
+path="res://.godot/imported/robo_shop.png-e40a41112d755bb2aa8441a050f1fdc5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://RTSAssets/stand.png"
-dest_files=["res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"]
+source_file="res://RTSAssets/robo_shop.png"
+dest_files=["res://.godot/imported/robo_shop.png-e40a41112d755bb2aa8441a050f1fdc5.ctex"]
 
 [params]
 

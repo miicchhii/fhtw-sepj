@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://d08oaxomtengn"
-path="res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"
+uid="uid://bnxyfa5x1mooo"
+path="res://.godot/imported/Robot_fire.png-173bbaba86a389640853972d70a9445c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://RTSAssets/stand.png"
-dest_files=["res://.godot/imported/stand.png-98c554612c8e5b4697d983a2a829eac7.ctex"]
+source_file="res://RTSAssets/Robot_fire.png"
+dest_files=["res://.godot/imported/Robot_fire.png-173bbaba86a389640853972d70a9445c.ctex"]
 
 [params]
 
