@@ -46,6 +46,11 @@ var follow_cursor = false
 
 var target: Vector2
 
+# POI visualization
+var poi_positions: Array = []  # Store POI positions for drawing debug lines
+var closest_allies_positions: Array = []  # Store closest ally positions
+var closest_enemies_positions: Array = []  # Store closest enemy positions
+
 # Combat tracking for RL reward calculation
 # These stats are reset each AI step and used to compute rewards in Game.gd
 var damage_dealt_this_step: int = 0      # Damage dealt to enemies this step
@@ -102,7 +107,7 @@ func _assign_policy() -> void:
 		var unit_num = unit_num_str.to_int()
 		if unit_num <= 50:
 			policy_id = "policy_LT50"      # Trainable general policy
-		elif unit_num < 76:
+		elif unit_num <= 75:
 			policy_id = "policy_GT50"      # Frozen baseline (for comparison)
 		else:
 			policy_id = "policy_frontline"  # Trainable frontline specialist
@@ -135,6 +140,46 @@ func step(_delta: float) -> void:
 func set_selected(value):
 	selected = value
 	box.visible = value
+	queue_redraw()  # Redraw when selection changes
+
+func set_poi_positions(pois: Array):
+	"""Update POI positions for debug visualization"""
+	poi_positions = pois
+	if selected:
+		queue_redraw()  # Redraw if selected
+
+func set_closest_units_positions(allies: Array, enemies: Array):
+	"""Update closest ally/enemy positions for debug visualization"""
+	closest_allies_positions = allies
+	closest_enemies_positions = enemies
+	if selected:
+		queue_redraw()  # Redraw if selected
+
+func _draw():
+	"""Draw debug lines to POIs, allies, and enemies when unit is selected"""
+	if not selected or is_enemy:  # Only draw for selected ally units
+		return
+
+	# Always draw lines to POIs (yellow)
+	for poi in poi_positions:
+		var local_poi = poi - global_position
+		draw_line(Vector2.ZERO, local_poi, Color.YELLOW, 2.0)
+
+	# Check if this is the only selected unit
+	var selected_allies = get_tree().get_nodes_in_group("ally").filter(func(u): return u.selected)
+	var is_only_selected = selected_allies.size() == 1
+
+	# Only draw ally/enemy lines if this is the only selected unit
+	if is_only_selected:
+		# Draw lines to closest allies (blue)
+		for ally_pos in closest_allies_positions:
+			var local_ally = ally_pos - global_position
+			draw_line(Vector2.ZERO, local_ally, Color.BLUE, 1.5)
+
+		# Draw lines to closest enemies (red)
+		for enemy_pos in closest_enemies_positions:
+			var local_enemy = enemy_pos - global_position
+			draw_line(Vector2.ZERO, local_enemy, Color.RED, 1.5)
 
 func _input(event):
 	if is_enemy:

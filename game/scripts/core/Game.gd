@@ -15,8 +15,8 @@ var ai_step: int = 0            # AI step counter (independent of physics ticks)
 var ai_tick_interval: int = 15  # Run AI logic every 15 physics ticks (~4 AI steps/second)
 
 # Map dimensions
-var map_w: int = 1280  # Map width in pixels
-var map_h: int = 720   # Map height in pixels
+var map_w: int = 1280*2  # Map width in pixels
+var map_h: int = 720*2   # Map height in pixels
 
 # Episode management
 var episode_ended: bool = false  # True when episode terminates
@@ -63,17 +63,29 @@ func spawn_all_units():
 
 	Units are spawned in a 5-column grid formation with 60-pixel spacing.
 	"""
+	
+	var spawnbox_start_x_1 = 50
+	var spawnbox_start_y_1 = 100
+
+	var spawnbox_start_x_2 = map_w/2
+	var spawnbox_start_y_2 = 100
+
+	var spawn_spacing_x = 250
+	var spawn_spacing_y = 133
+
 	# Determine spawn positions based on swap_spawn_sides
-	var ally_x = 300 if not swap_spawn_sides else 700
-	var enemy_x = 700 if not swap_spawn_sides else 300
+	var ally_x = spawnbox_start_x_1 if not swap_spawn_sides else spawnbox_start_x_2
+	var ally_y = spawnbox_start_y_1 if not swap_spawn_sides else spawnbox_start_y_2
+	var enemy_x = spawnbox_start_x_2 if not swap_spawn_sides else spawnbox_start_x_1
+	var enemy_y = spawnbox_start_y_2 if not swap_spawn_sides else spawnbox_start_y_1
 
 	var spawn_side_label = "normal" if not swap_spawn_sides else "SWAPPED"
-	print("Spawning units (", spawn_side_label, "): allies at x=", ally_x, ", enemies at x=", enemy_x)
+	print("Spawning units (", spawn_side_label, "): allies at (", ally_x, ", ", ally_y, "), enemies at (", enemy_x, ", ", enemy_y, ")")
 
 	# Create ally units with sequential IDs (mix of infantry and snipers)
 	print("Creating ally units...")
 	for i in range(num_ally_units_start):
-		var pos = Vector2(ally_x + (i % 5) * 60, 100 + (i / 5) * 60)
+		var pos = Vector2(ally_x + (i % 5) * spawn_spacing_x, ally_y + (i / 5) * spawn_spacing_y)
 		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
 		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, false, unit_type)
@@ -81,7 +93,7 @@ func spawn_all_units():
 	# Create enemy units with sequential IDs (mix of infantry and snipers)
 	print("Creating enemy units...")
 	for i in range(num_enemy_units_start):
-		var pos = Vector2(enemy_x + (i % 5) * 60, 100 + (i / 5) * 60)
+		var pos = Vector2(enemy_x + (i % 5) * spawn_spacing_x, enemy_y + (i / 5) * spawn_spacing_y)
 		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
 		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, true, unit_type)
@@ -175,7 +187,7 @@ func _physics_process(_delta: float) -> void:
 				var d: float = u.global_position.distance_to(center)
 				var max_dist: float = 640.0
 				var normalized_dist: float = clamp(d / max_dist, 0.0, 1.0)
-				var position_reward = 1 * (1.0 - normalized_dist*2)  # Small reward: +1 at center, -1 at edges
+				var position_reward = 0.1 * (1.0 - normalized_dist*2)  # Small reward: +1 at center, -1 at edges
 				reward += position_reward
 
 				# Small baseline reward for staying alive
@@ -205,14 +217,15 @@ func _build_observation() -> Dictionary:
 	"""
 	Build observation dictionary for all units to send to Python training.
 
-	Observation structure (89 dimensions per unit):
+	Observation structure (92 dimensions per unit):
 	- Unit metadata: id, policy_id, type_id, hp, max_hp, position, faction
 	- Battle stats: attack_range, attack_damage, attack_cooldown, remaining_cooldown, speed
 	- Closest 10 allies: direction (2D), distance, hp_ratio (4 values × 10 = 40 dimensions)
 	- Closest 10 enemies: direction (2D), distance, hp_ratio (4 values × 10 = 40 dimensions)
+	- Points of interest: direction (2D), distance (3 values × 1 POI = 3 dimensions)
 
 	The observation is sent to godot_multi_env.py which converts it to the RLlib format
-	(89-dimensional Box space normalized to [-1, 1]).
+	(92-dimensional Box space normalized to [-1, 1]).
 
 	Returns:
 		Dictionary with keys:
@@ -224,10 +237,43 @@ func _build_observation() -> Dictionary:
 	var all_units = get_tree().get_nodes_in_group("units")
 	var arr: Array = []
 
+	# Define points of interest (POIs) for units to navigate toward
+	var points_of_interest = [
+		Vector2(map_w * 0.5, map_h * 0.5),  # Map center (reward zone)
+	]
+
 	for u: RTSUnit in all_units:
 		# Get closest allies and enemies (10 each for spatial awareness)
 		var closest_allies = _get_closest_units(u, all_units, false, 10)  # 10 closest allies
 		var closest_enemies = _get_closest_units(u, all_units, true, 10)   # 10 closest enemies
+
+		# Get POI data (direction + distance for each POI)
+		var poi_data = _get_poi_data(u, points_of_interest)
+
+		# Update unit's POI positions for debug visualization
+		u.set_poi_positions(points_of_interest)
+
+		# Extract positions from closest allies/enemies for visualization
+		var ally_positions: Array = []
+		for ally_data in closest_allies:
+			# Reconstruct position from direction and distance
+			var direction = Vector2(ally_data["direction"][0], ally_data["direction"][1])
+			var distance = ally_data["distance"]
+			if direction != Vector2.ZERO and distance > 0:
+				var ally_pos = u.global_position + direction * distance
+				ally_positions.append(ally_pos)
+
+		var enemy_positions: Array = []
+		for enemy_data in closest_enemies:
+			# Reconstruct position from direction and distance
+			var direction = Vector2(enemy_data["direction"][0], enemy_data["direction"][1])
+			var distance = enemy_data["distance"]
+			if direction != Vector2.ZERO and distance > 0:
+				var enemy_pos = u.global_position + direction * distance
+				enemy_positions.append(enemy_pos)
+
+		# Update unit's closest units positions for debug visualization
+		u.set_closest_units_positions(ally_positions, enemy_positions)
 
 		arr.append({
 			"id": u.unit_id,
@@ -244,7 +290,8 @@ func _build_observation() -> Dictionary:
 			"attack_cooldown_remaining": u._atk_cd,
 			"speed": u.Speed,
 			"closest_allies": closest_allies,
-			"closest_enemies": closest_enemies
+			"closest_enemies": closest_enemies,
+			"points_of_interest": poi_data
 		})
 	return {
 		"ai_step": ai_step,  # Send AI step instead of physics tick
@@ -319,6 +366,39 @@ func _get_closest_units(source_unit: RTSUnit, all_units: Array, find_enemies: bo
 			"direction": [0.0, 0.0],
 			"distance": 0.0,
 			"hp_ratio": 0.0
+		})
+
+	return result
+
+func _get_poi_data(source_unit: RTSUnit, pois: Array) -> Array:
+	"""
+	Get directional vectors and distances to points of interest.
+
+	Similar to _get_closest_units, but for static map locations like:
+	- Map center (reward zone)
+	- Control points
+	- Resource locations
+	- Strategic positions
+
+	Args:
+		source_unit: The unit for which we're calculating POI data
+		pois: Array of Vector2 positions representing points of interest
+
+	Returns:
+		Array of dictionaries (one per POI):
+		- direction: [x, y] normalized direction vector from source to POI
+		- distance: Euclidean distance in pixels
+	"""
+	var result: Array = []
+
+	for poi_pos in pois:
+		# Calculate distance and direction to this POI
+		var distance = source_unit.global_position.distance_to(poi_pos)
+		var direction = (poi_pos - source_unit.global_position).normalized()
+
+		result.append({
+			"direction": [direction.x, direction.y],
+			"distance": distance
 		})
 
 	return result

@@ -20,7 +20,7 @@ import os
 # - Normalized x, y position
 # - HP ratio (current/max)
 # - Distance to map center (normalized)
-# Note: Actual observation is 89-dimensional with battle stats and nearby units
+# Note: Actual observation is 92-dimensional with battle stats, nearby units, and POIs
 OBS_SPACE = gym.spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32)
 
 # Action space: Discrete(9) - 8 directional movements + stay
@@ -160,22 +160,22 @@ if __name__ == "__main__":
         )
         .training(
             gamma=0.99,          # Discount factor for future rewards
-            lr=5e-3,             # Learning rate
-            train_batch_size=200,   # Total timesteps per training iteration
-            minibatch_size=100,     # Batch size for SGD (split train_batch into chunks)
+            lr=3e-4,             # Learning rate (standard PPO: 3e-4)
+            train_batch_size=2000,   # Total timesteps per training iteration
+            minibatch_size=500,     # Batch size for SGD (split train_batch into chunks)
             num_epochs=10,          # Number of SGD passes over each batch
             clip_param=0.2,         # PPO clip parameter (prevent large policy updates)
             vf_clip_param=10.0,     # Value function clip parameter
             use_gae=True,           # Use Generalized Advantage Estimation
             lambda_=0.9,            # GAE lambda parameter (bias-variance tradeoff)
-            entropy_coeff=0.001,    # Entropy bonus for exploration
+            entropy_coeff=0.01,    # Entropy bonus for exploration (increased for more randomness)
         )
         .rl_module(
             model_config={
-                "fcnet_hiddens": [64, 64, 64],  # 3-layer MLP: 64 hidden units per layer
-                "fcnet_activation": "tanh",      # Tanh activation function
-                "fcnet_weights_initializer": "xavier_uniform_",  # Xavier uniform weight init
-                "fcnet_bias_initializer": "zeros_",              # Zero bias initialization
+                "fcnet_hiddens": [64,64,64],                    # 3-layer MLP, known to work: [64,64,64] with 89dim obs space
+                "fcnet_activation": "tanh",                     # Tanh activation function
+                "fcnet_weights_initializer": "xavier_uniform_", # Xavier uniform weight init
+                "fcnet_bias_initializer": "zeros_",             # Zero bias initialization
             }
         )
         .multi_agent(
@@ -183,7 +183,7 @@ if __name__ == "__main__":
             policy_mapping_fn=policy_mapping_fn,
             # Train policy_LT50 only, keep GT50 and frontline frozen
             # Note: User can change policies_to_train to enable/disable training per policy
-            policies_to_train=["policy_LT50","policy_frontline"],
+            policies_to_train=["policy_LT50", "policy_GT50", "policy_frontline"],
             count_steps_by="agent_steps",  # Count steps per agent (not env steps)
         )
         .resources(
@@ -203,7 +203,7 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     # Checkpoint loading configuration
     # Priority: latest numbered checkpoint > checkpoint_3policy > train from scratch
-    skip_checkpoint_loading = False  # Set to True to train from scratch
+    skip_checkpoint_loading = False  # Set to True to train from scratch - ENABLED for fresh start
 
     # Determine which checkpoint to load
     checkpoint_to_load = None
