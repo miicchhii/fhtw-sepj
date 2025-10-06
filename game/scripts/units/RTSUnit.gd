@@ -1,23 +1,39 @@
 # RTSUnit.gd - Base class for all RTS units
+#
+# This is the base class for all controllable RTS units in the game.
+# Units can be controlled by:
+# - AI policies (via Python PPO training)
+# - Player input (when selected)
+#
+# Multi-policy support:
+# - Each unit has a policy_id that determines which AI model controls it
+# - Policies can be changed at runtime via set_policy()
+# - Policy assignments are sent to Python in observations
 extends CharacterBody2D
 class_name RTSUnit
 
-@export var is_enemy: bool = false   # same scene, different faction
+# Faction assignment
+@export var is_enemy: bool = false   # True for enemies, False for allies
 
-@export var unit_id: String = ""
-@export var type_id: int = 0
-@export var max_hp: int = 100
-var hp: int = max_hp
+# Unit identification
+@export var unit_id: String = ""     # Unique ID (e.g., "u25", "u87")
+@export var type_id: int = 0         # Unit type (0=Infantry, 1=Sniper)
+@export var max_hp: int = 100        # Maximum health points
+var hp: int = max_hp                 # Current health points
 
-# Combat properties - can be overridden by subclasses
-var attack_range := 64.0        # must be inside this to hit
-var attack_damage := 15
-var attack_cooldown := 0.8
-var Speed := 50
+# AI policy assignment for multi-policy training
+# Determines which neural network model controls this unit
+var policy_id: String = ""  # e.g., "policy_LT50", "policy_GT50", "policy_frontline"
 
-# Combat state
-var attack_target: Node = null
-var _atk_cd := 0.0
+# Combat properties - can be overridden by subclasses (Infantry, Sniper, etc.)
+var attack_range := 64.0        # Must be within this range to attack
+var attack_damage := 15         # Damage per hit
+var attack_cooldown := 0.8      # Seconds between attacks
+var Speed := 50                 # Movement speed (pixels per second)
+
+# Combat state tracking
+var attack_target: Node = null  # Currently targeted enemy/ally
+var _atk_cd := 0.0              # Attack cooldown timer
 
 @export var selected = false
 @onready var box = get_node("Box")
@@ -30,15 +46,19 @@ var follow_cursor = false
 
 var target: Vector2
 
-# Combat tracking for rewards
-var damage_dealt_this_step: int = 0
-var damage_received_this_step: int = 0
-var kills_this_step: int = 0
-var died_this_step: bool = false
+# Combat tracking for RL reward calculation
+# These stats are reset each AI step and used to compute rewards in Game.gd
+var damage_dealt_this_step: int = 0      # Damage dealt to enemies this step
+var damage_received_this_step: int = 0   # Damage received from enemies this step
+var kills_this_step: int = 0             # Number of kills this step
+var died_this_step: bool = false         # True if unit died this step
 
 func _ready() -> void:
 	# Set unit-specific stats first
 	_initialize_unit_stats()
+
+	# Assign policy based on unit_id number
+	_assign_policy()
 
 	# mark enemies and keep them unselectable
 	if is_enemy:
@@ -55,7 +75,7 @@ func _ready() -> void:
 
 	set_selected(selected)
 	add_to_group("units", true)
-	print("Unit ", unit_id, " final stats: HP=", max_hp, " Range=", attack_range, " Damage=", attack_damage, " Speed=", Speed)
+	print("Unit ", unit_id, " final stats: HP=", max_hp, " Range=", attack_range, " Damage=", attack_damage, " Speed=", Speed, " Policy=", policy_id)
 	print("Unit ", unit_id, " added to groups: ", get_groups())
 	hp = max_hp
 	target = global_position
@@ -65,6 +85,43 @@ func _ready() -> void:
 func _initialize_unit_stats() -> void:
 	# Base stats - subclasses should override this
 	pass
+
+func _assign_policy() -> void:
+	"""
+	Assign initial AI policy based on unit_id number.
+
+	Policy distribution:
+	- u1-u49   (49 units) → policy_LT50 (trainable)
+	- u50-u75  (26 units) → policy_GT50 (frozen baseline)
+	- u76-u100 (25 units) → policy_frontline (trainable)
+
+	This assignment can be changed at runtime via set_policy().
+	"""
+	if unit_id.begins_with("u"):
+		var unit_num_str = unit_id.substr(1)  # Extract number part (e.g., "u25" → "25")
+		var unit_num = unit_num_str.to_int()
+		if unit_num <= 50:
+			policy_id = "policy_LT50"      # Trainable general policy
+		elif unit_num < 76:
+			policy_id = "policy_GT50"      # Frozen baseline (for comparison)
+		else:
+			policy_id = "policy_frontline"  # Trainable frontline specialist
+	else:
+		policy_id = "policy_LT50"  # Default fallback
+
+func set_policy(new_policy_id: String) -> void:
+	"""
+	Change this unit's AI policy at runtime.
+
+	Enables dynamic policy switching during gameplay or training.
+	The new policy takes effect on the next AI step.
+
+	Args:
+		new_policy_id: Name of the policy (e.g., "policy_LT50", "policy_frontline")
+	"""
+	if policy_id != new_policy_id:
+		print("Unit ", unit_id, " policy changed: ", policy_id, " -> ", new_policy_id)
+		policy_id = new_policy_id
 
 func set_move_target(p: Vector2) -> void:
 	target = p

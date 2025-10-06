@@ -9,36 +9,55 @@ from typing import Dict, Any, Tuple, Optional
 
 class GodotRTSMultiAgentEnv(MultiAgentEnv):
     """
-    Multi-agent environment that connects to a single Godot RTS game instance via TCP socket.
-    Uses Ray RLlib's new API stack with single worker configuration for stable training.
-    Manages 20 RTS units as individual agents in a shared environment.
+    Multi-agent RTS environment bridge between Godot game and Ray RLlib.
+
+    Connects to a Godot game instance via TCP socket (JSON protocol) and manages
+    up to 100 RTS units as individual RL agents across 3 policies:
+    - policy_LT50: 49 trainable units (u1-u49)
+    - policy_GT50: 26 frozen baseline units (u50-u75)
+    - policy_frontline: 25 trainable units (u76-u100)
+
+    Features:
+    - Dynamic policy assignment: Units send policy_id in observations
+    - 89-dimensional observations: position, HP, battle stats, nearby units
+    - 9 discrete actions: 8 directional movements + stay
+    - Episode management: Automatic reset after max steps or victory/defeat
     """
 
     def __init__(self, env_config: Dict[str, Any]):
         super().__init__()
+        # TCP connection configuration
         self.host = env_config.get("host", "127.0.0.1")
         self.port = env_config.get("port", 5555)
-        print(f"GodotRTSMultiAgentEnv: Connecting to Godot RTS game at {self.host}:{self.port}")
         self.timeout = env_config.get("timeout", 2.0)
-        self.ep_horizon = env_config.get("ep_horizon", 50)
-        self.step_len = env_config.get("step_len", 10.0)
+        print(f"GodotRTSMultiAgentEnv: Connecting to Godot RTS game at {self.host}:{self.port}")
 
-        # Socket connection
+        # Socket state
         self.socket: Optional[socket.socket] = None
         self.connected = False
 
-        # Agent tracking
-        self.agents = set()
-        self.possible_agents = [f"u{i}" for i in range(1, 1001)]  # Pre-define possible agents u1 to u100
-        self.last_obs = {}
+        # Agent tracking (100 units: u1-u100)
+        self.agents = set()  # Currently active agents in this episode
+        self.possible_agents = [f"u{i}" for i in range(1, 101)]  # All possible unit IDs
+        self.last_obs = {}  # Cache of last observation for each agent
 
-        # Episode tracking
+        # Multi-policy support: Track which policy each unit is assigned to
+        # Updated from Godot observations each step
+        self.agent_to_policy = {}  # Maps agent_id -> policy_id (e.g., "u25" -> "policy_LT50")
+
+        # Episode state
         self.episode_step = 0
         self.episode_ended = False
 
-        # Define spaces (these should match your actual observation/action spaces)
-        # New observation space: base(4) + battle_stats(5) + closest_allies(10*4) + closest_enemies(10*4) = 89 values
-        self.observation_space = Box(low=-1.0, high=10.0, shape=(89,), dtype=np.float32)  # Increased upper bound for distances
+        # Observation space: 89-dimensional vector
+        # - Base (4): norm_x, norm_y, hp_ratio, dist_to_center
+        # - Battle stats (5): attack_range, attack_damage, attack_cooldown, cooldown_remaining, speed
+        # - Closest allies (40): 10 units × (direction_x, direction_y, distance, hp_ratio)
+        # - Closest enemies (40): 10 units × (direction_x, direction_y, distance, hp_ratio)
+        self.observation_space = Box(low=-1.0, high=10.0, shape=(89,), dtype=np.float32)
+
+        # Action space: 9 discrete actions
+        # 0: stay, 1-3: up-left/up/up-right, 4-6: left/stay/right, 7-9: down-left/down/down-right
         self.action_space = Discrete(9)
 
         # Multi-agent spaces - initialize with possible agents
@@ -183,14 +202,25 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         return None
 
     def _extract_obs_and_agents(self, godot_obs: Dict[str, Any]) -> Tuple[Dict[str, np.ndarray], Dict[str, Dict]]:
-        """Convert Godot observation to gym format"""
+        """
+        Convert Godot observation message to RLlib format.
+
+        Transforms raw Godot unit data into normalized 89-dimensional observation vectors
+        and extracts policy assignments for dynamic multi-policy support.
+
+        Args:
+            godot_obs: Raw observation from Godot containing units list and map info
+
+        Returns:
+            Tuple of (observations dict, infos dict) where both are keyed by agent_id
+        """
         observations = {}
         infos = {}
 
         units = godot_obs.get("units", [])
-        map_info = godot_obs.get("map", {"w": 1024, "h": 768})
+        map_info = godot_obs.get("map", {"w": 1280, "h": 720})
 
-        # Track current agents from Godot
+        # Track which agents are alive in this observation
         current_agents = set()
 
         for unit in units:
@@ -199,6 +229,11 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                 continue
 
             current_agents.add(agent_id)
+
+            # Extract and store policy assignment from Godot
+            # This enables dynamic policy switching - unit can change policy via set_policy()
+            policy_id = unit.get("policy_id", "policy_LT50")
+            self.agent_to_policy[agent_id] = policy_id
 
             # Convert unit data to normalized observation vector
             pos = unit.get("pos", [0, 0])
@@ -263,7 +298,8 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                 "raw_pos": pos,
                 "hp": unit.get("hp", 1),
                 "max_hp": unit.get("max_hp", 1),
-                "episode_step": self.episode_step
+                "episode_step": self.episode_step,
+                "policy_id": policy_id  # Include policy ID in info
             }
 
             # Update spaces
@@ -343,12 +379,13 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             else:
                 action = 0  # Default action
 
+            stepsize = 30
             # Map action to movement
             moves = [
                 [0, 0],    # 0: no move
-                [-100, -100], [0, -100], [100, -100],  # 1,2,3: up-left, up, up-right
-                [-100, 0],   [0, 0],   [100, 0],    # 4,5,6: left, stay, right
-                [-100, 100],  [0, 100],  [100, 100]    # 7,8,9: down-left, down, down-right
+                [-stepsize, -stepsize], [0, -stepsize], [stepsize, -stepsize],  # 1,2,3: up-left, up, up-right
+                [-stepsize, 0],   [0, 0],   [stepsize, 0],    # 4,5,6: left, stay, right
+                [-stepsize, stepsize],  [0, stepsize],  [stepsize, stepsize]    # 7,8,9: down-left, down, down-right
             ]
 
             if 0 <= action < len(moves):

@@ -1,20 +1,38 @@
-# Game.gd
+# Game.gd - Main game controller for RTS multi-agent training
+#
+# Manages:
+# - 100 RTS units (50 allies, 50 enemies)
+# - AI training integration via AiServer
+# - Episode management and resets
+# - Reward calculation for reinforcement learning
+# - Spawn side alternation for robust learning
 extends Node2D
 class_name Game
 
-var tick: int = 0
-var ai_step: int = 0  # Track AI steps separately from physics ticks
-var ai_tick_interval: int = 25  # Run AI logic every X ticks
-var map_w: int = 1280
-var map_h: int = 720
-var episode_ended: bool = false
-var max_episode_steps: int = 100 
+# Physics and timing
+var tick: int = 0               # Physics tick counter (60 ticks per second)
+var ai_step: int = 0            # AI step counter (independent of physics ticks)
+var ai_tick_interval: int = 15  # Run AI logic every 15 physics ticks (~4 AI steps/second)
 
-var num_ally_units_start = 50
-var num_enemy_units_start = 50
+# Map dimensions
+var map_w: int = 1280  # Map width in pixels
+var map_h: int = 720   # Map height in pixels
 
-# AI Control toggle
-var ai_controls_allies: bool = true  # Start with AI controlling allies
+# Episode management
+var episode_ended: bool = false  # True when episode terminates
+var max_episode_steps: int = 200  # Maximum AI steps per episode
+
+# Unit configuration
+var num_ally_units_start = 50   # Number of ally units to spawn
+var num_enemy_units_start = 50  # Number of enemy units to spawn
+
+# AI control toggle (N key = AI, M key = manual)
+var ai_controls_allies: bool = true  # Whether AI controls ally units
+
+# Spawn side alternation for position-invariant learning
+# Prevents AI from learning position-specific strategies
+var episode_count: int = 0          # Total episodes completed
+var swap_spawn_sides: bool = false  # True to swap ally/enemy spawn sides
 
 var units = []
 var unit_scene = preload("res://scenes/units/infantry.tscn")
@@ -29,11 +47,33 @@ func _ready() -> void:
 	print("Game: Added to 'game' group")
 
 func spawn_all_units():
-	"""Spawn all ally and enemy units with a mix of infantry and snipers"""
+	"""
+	Spawn all ally and enemy units with a mix of infantry and snipers.
+
+	Implements spawn side alternation for position-invariant learning:
+	- Even episodes (0, 2, 4...): allies spawn left (x=300), enemies right (x=700)
+	- Odd episodes (1, 3, 5...): allies spawn right (x=700), enemies left (x=300)
+
+	This prevents the AI from learning position-specific strategies and ensures
+	robust tactical behavior regardless of spawn location.
+
+	Unit composition:
+	- 50 ally units: 1/3 snipers (long range), 2/3 infantry (balanced)
+	- 50 enemy units: 1/3 snipers (long range), 2/3 infantry (balanced)
+
+	Units are spawned in a 5-column grid formation with 60-pixel spacing.
+	"""
+	# Determine spawn positions based on swap_spawn_sides
+	var ally_x = 300 if not swap_spawn_sides else 700
+	var enemy_x = 700 if not swap_spawn_sides else 300
+
+	var spawn_side_label = "normal" if not swap_spawn_sides else "SWAPPED"
+	print("Spawning units (", spawn_side_label, "): allies at x=", ally_x, ", enemies at x=", enemy_x)
+
 	# Create ally units with sequential IDs (mix of infantry and snipers)
 	print("Creating ally units...")
 	for i in range(num_ally_units_start):
-		var pos = Vector2(300 + (i % 5) * 60, 100 + (i / 5) * 60)
+		var pos = Vector2(ally_x + (i % 5) * 60, 100 + (i / 5) * 60)
 		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
 		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, false, unit_type)
@@ -41,7 +81,7 @@ func spawn_all_units():
 	# Create enemy units with sequential IDs (mix of infantry and snipers)
 	print("Creating enemy units...")
 	for i in range(num_enemy_units_start):
-		var pos = Vector2(700 + (i % 5) * 60, 100 + (i / 5) * 60)
+		var pos = Vector2(enemy_x + (i % 5) * 60, 100 + (i / 5) * 60)
 		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
 		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, true, unit_type)
@@ -126,16 +166,16 @@ func _physics_process(_delta: float) -> void:
 
 				# Combat-based rewards (primary)
 				reward += u.damage_dealt_this_step * 0.1  # +0.1 per damage point dealt
-				reward += u.kills_this_step * 25.0         # +5.0 per kill
+				reward += u.kills_this_step * 15.0         # +25.0 per kill
 				reward -= u.damage_received_this_step * 0.1  # -0.1 per damage point received
 				if u.died_this_step:
-					reward -= 10.0  # -10.0 for dying
+					reward -= 5.0  # -10.0 for dying
 
 				# Small positional reward for being near center
 				var d: float = u.global_position.distance_to(center)
 				var max_dist: float = 640.0
 				var normalized_dist: float = clamp(d / max_dist, 0.0, 1.0)
-				var position_reward = 0.1 * (1.0 - normalized_dist)  # Small reward: +0.1 at center, 0 at edges
+				var position_reward = 1 * (1.0 - normalized_dist*2)  # Small reward: +1 at center, -1 at edges
 				reward += position_reward
 
 				# Small baseline reward for staying alive
@@ -162,16 +202,36 @@ func _physics_process(_delta: float) -> void:
 				# Don't auto-reset here - let Python handle the reset via _ai_request_reset()
 
 func _build_observation() -> Dictionary:
+	"""
+	Build observation dictionary for all units to send to Python training.
+
+	Observation structure (89 dimensions per unit):
+	- Unit metadata: id, policy_id, type_id, hp, max_hp, position, faction
+	- Battle stats: attack_range, attack_damage, attack_cooldown, remaining_cooldown, speed
+	- Closest 10 allies: direction (2D), distance, hp_ratio (4 values × 10 = 40 dimensions)
+	- Closest 10 enemies: direction (2D), distance, hp_ratio (4 values × 10 = 40 dimensions)
+
+	The observation is sent to godot_multi_env.py which converts it to the RLlib format
+	(89-dimensional Box space normalized to [-1, 1]).
+
+	Returns:
+		Dictionary with keys:
+		- ai_step: Current AI step counter (independent of physics ticks)
+		- tick: Physics tick counter (60 ticks per second)
+		- map: Map dimensions {w: 1280, h: 720}
+		- units: Array of unit observation dictionaries
+	"""
 	var all_units = get_tree().get_nodes_in_group("units")
 	var arr: Array = []
 
 	for u: RTSUnit in all_units:
-		# Get closest allies and enemies
+		# Get closest allies and enemies (10 each for spatial awareness)
 		var closest_allies = _get_closest_units(u, all_units, false, 10)  # 10 closest allies
 		var closest_enemies = _get_closest_units(u, all_units, true, 10)   # 10 closest enemies
 
 		arr.append({
 			"id": u.unit_id,
+			"policy_id": u.policy_id,  # Include policy assignment
 			"type_id": u.type_id,
 			"hp": u.hp,
 			"max_hp": u.max_hp,
@@ -194,6 +254,25 @@ func _build_observation() -> Dictionary:
 	}
 
 func _get_closest_units(source_unit: RTSUnit, all_units: Array, find_enemies: bool, max_count: int) -> Array:
+	"""
+	Find the closest N units of a specific faction relative to source_unit.
+
+	This function is used to build spatial awareness observations for each unit.
+	It finds nearby allies or enemies and returns their relative position,
+	distance, and health ratio.
+
+	Args:
+		source_unit: The unit for which we're finding nearby units
+		all_units: Array of all units in the game
+		find_enemies: True to find enemies, False to find allies
+		max_count: Maximum number of units to return (e.g., 10)
+
+	Returns:
+		Array of dictionaries (length = max_count, padded with zeros if needed):
+		- direction: [x, y] normalized direction vector from source to target
+		- distance: Euclidean distance in pixels
+		- hp_ratio: Target's current HP / max HP (0.0 to 1.0)
+	"""
 	var candidates: Array = []
 
 	# Filter units by faction (allies vs enemies relative to source_unit)
@@ -245,6 +324,25 @@ func _get_closest_units(source_unit: RTSUnit, all_units: Array, find_enemies: bo
 	return result
 
 func _apply_actions(actions: Dictionary) -> void:
+	"""
+	Apply movement actions from Python AI to Godot units.
+
+	Receives actions from godot_multi_env.py which converts the discrete action
+	space (9 discrete actions: 8 directions + stay) into continuous movement targets.
+
+	Action format from Python:
+	{
+		"u1": {"move": [x, y]},
+		"u2": {"move": [x, y]},
+		...
+	}
+
+	The AI control toggle (N/M keys) allows switching between AI and manual control
+	for ally units. Enemy units are always AI-controlled.
+
+	Args:
+		actions: Dictionary mapping unit IDs to action dictionaries
+	"""
 	# actions expected shape: { "u1": {"move":[x,y]}, ... }
 	for id_var in actions.keys():
 		var id: String = String(id_var)
@@ -273,10 +371,36 @@ func _get_unit(id: String) -> RTSUnit:
 	return null
 
 func _ai_request_reset() -> void:
+	"""
+	Reset the game episode when called by Python training system.
+
+	This function is called by AiServer when Python sends a reset request after
+	an episode terminates. It handles:
+	- Clearing all units and resetting counters
+	- Alternating spawn sides for position-invariant learning
+	- Respawning all units with fresh IDs
+	- Sending initial observation to Python
+
+	Episode termination conditions:
+	- ai_step >= max_episode_steps (default 100)
+	- All allies dead (game lost)
+	- All enemies dead (game won)
+
+	Spawn side alternation:
+	- Episode 0, 2, 4... (even): allies left, enemies right
+	- Episode 1, 3, 5... (odd): allies right, enemies left
+
+	This prevents the AI from learning position-dependent strategies like
+	"always move right" instead of "move toward enemies".
+	"""
 	print("Game: Resetting episode...")
 	tick = 0
 	ai_step = 0
 	episode_ended = false
+
+	# Increment episode count and alternate spawn sides
+	episode_count += 1
+	swap_spawn_sides = (episode_count % 2 == 1)  # Swap on odd episodes
 
 	# Remove all existing units
 	for u in get_tree().get_nodes_in_group("units"):
@@ -289,7 +413,7 @@ func _ai_request_reset() -> void:
 	Global.next_unit_id = 1
 
 	# Respawn all units using the reusable function
-	print("Respawning units...")
+	print("Respawning units (episode ", episode_count, ")...")
 	spawn_all_units()
 
 	# Refresh units array

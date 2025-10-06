@@ -83,3 +83,70 @@ This project implements a multi-agent reinforcement learning system where AI age
 - Current single-worker setup prioritizes stability
 - Multi-worker scaling requires solving dynamic port assignment challenges
 - Performance can be improved with GPU acceleration when available
+
+---
+
+## Multi-Policy System Design (Planned)
+
+### Protocol: Separate Unit ID from Policy Assignment
+
+**Key Principle**: Unit IDs remain stable identifiers (`u1`-`u100`), while policy assignments are dynamic metadata sent in observations.
+
+### Observation Protocol
+Godot sends `policy_id` field in unit observations:
+```gdscript
+{
+  "ai_step": 42,
+  "units": [
+    {
+      "id": "u1",
+      "policy_id": "aggressive_sniper",  // Dynamic policy assignment
+      "hp": 100,
+      "pos": [300, 200],
+      // ... other fields
+    }
+  ]
+}
+```
+
+### Python Side
+- Track `agent_to_policy` mapping in `godot_multi_env.py`
+- Policy mapping function uses dynamic lookups from observations
+- Support runtime policy changes mid-game
+
+### Implementation Files
+- **Godot**: `game/scripts/units/RTSUnit.gd` - add `policy_id: String` field
+- **Godot**: `game/scripts/core/Game.gd:173-188` - include `policy_id` in observations
+- **Python**: `ai/godot_multi_env.py` - track `self.agent_to_policy` mapping
+- **Python**: `ai/train_rllib_ppo_simple.py` - define multiple policies, dynamic `policy_mapping_fn()`
+
+### Advantages
+- ✅ Stable unit IDs throughout lifetime
+- ✅ Per-unit policy granularity (e.g., "5 selected snipers" can use different policies)
+- ✅ Runtime policy switching via Godot UI
+- ✅ Explicit communication from Godot to Python
+- ✅ Backward compatible with existing code
+
+### Current Implementation Status
+**Phase 2**: ✅ Completed - 3 policies with dynamic assignment
+- `policy_LT50`: Trainable policy (u1-u49, 49 units)
+- `policy_GT50`: Frozen policy for evaluation (u50-u75, 26 units)
+- `policy_frontline`: Trainable frontline policy (u76-u100, 25 units) - copied from LT50
+- Unit IDs remain `u1`-`u100` (stable identifiers)
+- **Dynamic policy switching**: Call `unit.set_policy("policy_name")` to change at runtime
+- **Checkpoint**: `checkpoint_3policy` contains all 3 policies migrated from `checkpoint_final`
+
+### How It Works
+1. **Godot** sends `policy_id` field in each unit's observation
+2. **Python** `policy_mapping_fn` reads `policy_id` from episode info
+3. **Fallback** to unit ID-based assignment if episode data unavailable
+4. **Runtime switching**: Change unit policy via `set_policy()` method, takes effect next step
+
+### Example: Changing Policies at Runtime
+```gdscript
+# In Godot - change selected units to aggressive policy
+for unit in get_selected_units():
+    unit.set_policy("policy_aggressive")
+
+# Next AI step will use the new policy for these units
+```
