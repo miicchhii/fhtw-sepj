@@ -8,5 +8,5 @@ func _initialize_unit_stats() -> void:
 	attack_range = 150.0     # Much longer range
 	attack_damage = 25       # Higher damage
 	attack_cooldown = 1.2    # Slower attack rate
-	Speed = 30               # Slower movement
+	Speed = 70               # Slower movement
 	print("Sniper stats initialized for unit: ", unit_id)

@@ -8,5 +8,5 @@ func _initialize_unit_stats() -> void:
 	attack_range = 64.0
 	attack_damage = 15
 	attack_cooldown = 0.8
-	Speed = 50
+	Speed = 150
 	print("Infantry stats initialized for unit: ", unit_id)

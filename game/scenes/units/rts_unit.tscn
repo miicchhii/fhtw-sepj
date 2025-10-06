@@ -153,7 +153,7 @@ bg_color = Color(2.21401e-06, 0.69626, 0.615668, 1)
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vome1"]
 bg_color = Color(0.859936, 0.499734, 0, 1)
 
-[node name="Infantry" type="CharacterBody2D"]
+[node name="Infantry2" type="CharacterBody2D"]
 collision_layer = 524288
 script = ExtResource("1_twhwq")
 
