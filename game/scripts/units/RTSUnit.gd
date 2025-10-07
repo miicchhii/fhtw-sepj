@@ -53,9 +53,11 @@ var closest_enemies_positions: Array = []  # Store closest enemy positions
 
 # Combat tracking for RL reward calculation
 # These stats are reset each AI step and used to compute rewards in Game.gd
-var damage_dealt_this_step: int = 0      # Damage dealt to enemies this step
+var damage_dealt_this_step: int = 0      # Damage dealt to enemy units this step
+var damage_to_base_this_step: int = 0    # Damage dealt to enemy base this step (worth more)
 var damage_received_this_step: int = 0   # Damage received from enemies this step
-var kills_this_step: int = 0             # Number of kills this step
+var kills_this_step: int = 0             # Number of kills this step (units)
+var base_kills_this_step: int = 0        # Number of base kills this step (worth more)
 var died_this_step: bool = false         # True if unit died this step
 
 func _ready() -> void:
@@ -93,26 +95,18 @@ func _initialize_unit_stats() -> void:
 
 func _assign_policy() -> void:
 	"""
-	Assign initial AI policy based on unit_id number.
+	Assign initial AI policy based on faction.
 
 	Policy distribution:
-	- u1-u49   (49 units) → policy_LT50 (trainable)
-	- u50-u75  (26 units) → policy_GT50 (frozen baseline)
-	- u76-u100 (25 units) → policy_frontline (trainable)
+	- Allies (is_enemy=false) → policy_LT50 (trainable)
+	- Enemies (is_enemy=true) → policy_GT50 (trainable)
 
 	This assignment can be changed at runtime via set_policy().
 	"""
-	if unit_id.begins_with("u"):
-		var unit_num_str = unit_id.substr(1)  # Extract number part (e.g., "u25" → "25")
-		var unit_num = unit_num_str.to_int()
-		if unit_num <= 50:
-			policy_id = "policy_LT50"      # Trainable general policy
-		elif unit_num <= 75:
-			policy_id = "policy_GT50"      # Frozen baseline (for comparison)
-		else:
-			policy_id = "policy_frontline"  # Trainable frontline specialist
+	if is_enemy:
+		policy_id = "policy_GT50"  # Enemy team policy
 	else:
-		policy_id = "policy_LT50"  # Default fallback
+		policy_id = "policy_LT50"  # Ally team policy
 
 func set_policy(new_policy_id: String) -> void:
 	"""
@@ -218,7 +212,10 @@ func _physics_process(delta):
 
 		# acquire a target only if it's already inside attack_range
 		if attack_target == null:
+			# Prioritize enemy units, but also attack enemy base if in range
 			attack_target = _pick_enemy_in_range(attack_range)
+			if attack_target == null:
+				attack_target = _pick_enemy_base_in_range(attack_range)
 
 		if attack_target:
 			# if target left range, drop it (no chasing)
@@ -250,7 +247,10 @@ func _physics_process(delta):
 
 		# acquire a target only if it's already inside attack_range
 		if attack_target == null:
+			# Prioritize ally units, but also attack ally base if in range
 			attack_target = _pick_ally_in_range(attack_range)
+			if attack_target == null:
+				attack_target = _pick_ally_base_in_range(attack_range)
 
 		if attack_target:
 			var d := position.distance_to(attack_target.global_position)
@@ -295,8 +295,10 @@ func _update_hp_bar() -> void:
 func reset_combat_stats() -> void:
 	# Reset combat tracking for next step
 	damage_dealt_this_step = 0
+	damage_to_base_this_step = 0
 	damage_received_this_step = 0
 	kills_this_step = 0
+	base_kills_this_step = 0
 	died_this_step = false
 
 func _pick_enemy_in_range(radius: float) -> Node:
@@ -322,3 +324,23 @@ func _pick_ally_in_range(radius: float) -> Node:
 			best = n
 			best_d = d
 	return best
+
+func _pick_enemy_base_in_range(radius: float) -> Node:
+	var bases = get_tree().get_nodes_in_group("enemy_base")
+	if bases.size() > 0:
+		var base = bases[0]
+		if is_instance_valid(base):
+			var d := position.distance_to(base.global_position)
+			if d <= radius:
+				return base
+	return null
+
+func _pick_ally_base_in_range(radius: float) -> Node:
+	var bases = get_tree().get_nodes_in_group("ally_base")
+	if bases.size() > 0:
+		var base = bases[0]
+		if is_instance_valid(base):
+			var d := position.distance_to(base.global_position)
+			if d <= radius:
+				return base
+	return null

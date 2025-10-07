@@ -20,7 +20,7 @@ var map_h: int = 720*2   # Map height in pixels
 
 # Episode management
 var episode_ended: bool = false  # True when episode terminates
-var max_episode_steps: int = 200  # Maximum AI steps per episode
+var max_episode_steps: int = 500  # Maximum AI steps per episode
 
 # Unit configuration
 var num_ally_units_start = 50   # Number of ally units to spawn
@@ -38,13 +38,47 @@ var units = []
 var unit_scene = preload("res://scenes/units/infantry.tscn")
 var next_unit_id = 1
 
+# Base configuration
+var base_scene = preload("res://scenes/buildings/base.tscn")
+var ally_base: Node = null
+var enemy_base: Node = null
+
 func _ready() -> void:
+	spawn_bases()
 	init_units()
 	get_units()
 
 	# IMPORTANT: Add this node to the "game" group so AiServer can find it
 	add_to_group("game")
 	print("Game: Added to 'game' group")
+
+func spawn_bases():
+	"""
+	Spawn ally and enemy bases on the map.
+
+	Bases are placed at strategic locations:
+	- Ally base: Left side of map
+	- Enemy base: Right side of map
+
+	These positions swap when spawn_spawn_sides is true (odd episodes).
+	"""
+	var base_y = map_h * 0.5  # Center vertically
+	var ally_base_x = 200 if not swap_spawn_sides else map_w - 200
+	var enemy_base_x = map_w - 200 if not swap_spawn_sides else 200
+
+	# Spawn ally base
+	ally_base = base_scene.instantiate()
+	ally_base.is_enemy = false
+	ally_base.position = Vector2(ally_base_x, base_y)
+	add_child(ally_base)
+	print("Spawned ally base at (", ally_base_x, ", ", base_y, ")")
+
+	# Spawn enemy base
+	enemy_base = base_scene.instantiate()
+	enemy_base.is_enemy = true
+	enemy_base.position = Vector2(enemy_base_x, base_y)
+	add_child(enemy_base)
+	print("Spawned enemy base at (", enemy_base_x, ", ", base_y, ")")
 
 func spawn_all_units():
 	"""
@@ -158,8 +192,12 @@ func _physics_process(_delta: float) -> void:
 			var allies_alive = ally_units.size()
 			var enemies_alive = enemy_units.size()
 
-			var game_won = (enemies_alive == 0 and allies_alive > 0)
-			var game_lost = (allies_alive == 0 and enemies_alive > 0)
+			# Check base destruction
+			var ally_base_destroyed = (ally_base == null or not is_instance_valid(ally_base))
+			var enemy_base_destroyed = (enemy_base == null or not is_instance_valid(enemy_base))
+
+			var game_won = (enemies_alive == 0 and allies_alive > 0) or enemy_base_destroyed
+			var game_lost = (allies_alive == 0 and enemies_alive > 0) or ally_base_destroyed
 
 			# Check for episode end condition
 			var should_end_episode = (ai_step >= max_episode_steps) or game_won or game_lost
@@ -177,17 +215,38 @@ func _physics_process(_delta: float) -> void:
 				var reward: float = 0.0
 
 				# Combat-based rewards (primary)
-				reward += u.damage_dealt_this_step * 0.1  # +0.1 per damage point dealt
-				reward += u.kills_this_step * 15.0         # +25.0 per kill
-				reward -= u.damage_received_this_step * 0.1  # -0.1 per damage point received
+				reward += u.damage_dealt_this_step * 0.1      # +0.1 per damage point to units
+				reward += u.damage_to_base_this_step * 0.5    # +0.5 per damage point to base (5× more valuable!)
+				reward += u.kills_this_step * 15.0            # +15.0 per unit kill
+				reward += u.base_kills_this_step * 200.0      # +200.0 per base kill (HUGE reward!)
+				reward -= u.damage_received_this_step * 0.1   # -0.1 per damage point received
 				if u.died_this_step:
-					reward -= 5.0  # -10.0 for dying
+					reward -= 5.0  # -5.0 for dying
 
-				# Small positional reward for being near center
-				var d: float = u.global_position.distance_to(center)
-				var max_dist: float = 640.0
-				var normalized_dist: float = clamp(d / max_dist, 0.0, 1.0)
-				var position_reward = 0.1 * (1.0 - normalized_dist*2)  # Small reward: +1 at center, -1 at edges
+				# Individual victory/defeat rewards (reduced to emphasize individual contribution)
+				# Each unit gets rewarded/penalized based on their team's outcome
+				if game_won and not u.is_enemy:
+					reward += 50.0  # Team victory bonus for ally (reduced from 100.0)
+				elif game_lost and not u.is_enemy:
+					reward -= 25.0  # Team defeat penalty for ally (reduced from -50.0)
+				elif game_won and u.is_enemy:
+					reward -= 25.0  # Team defeat penalty for enemy (reduced from -50.0)
+				elif game_lost and u.is_enemy:
+					reward += 50.0  # Team victory bonus for enemy (reduced from 100.0)
+
+				# Positional reward: encourage moving toward enemy base (objective-focused)
+				var enemy_base_pos: Vector2
+				if u.is_enemy and ally_base and is_instance_valid(ally_base):
+					enemy_base_pos = ally_base.global_position
+				elif not u.is_enemy and enemy_base and is_instance_valid(enemy_base):
+					enemy_base_pos = enemy_base.global_position
+				else:
+					enemy_base_pos = center  # Fallback to center if base destroyed
+
+				var dist_to_objective: float = u.global_position.distance_to(enemy_base_pos)
+				var max_dist: float = 1280.0  # Map width
+				var normalized_dist: float = clamp(dist_to_objective / max_dist, 0.0, 1.0)
+				var position_reward = 0.5 * (1.0 - normalized_dist)  # +0.5 at base, 0.0 at far edge
 				reward += position_reward
 
 				# Small baseline reward for staying alive
@@ -237,12 +296,22 @@ func _build_observation() -> Dictionary:
 	var all_units = get_tree().get_nodes_in_group("units")
 	var arr: Array = []
 
-	# Define points of interest (POIs) for units to navigate toward
-	var points_of_interest = [
-		Vector2(map_w * 0.5, map_h * 0.5),  # Map center (reward zone)
-	]
-
 	for u: RTSUnit in all_units:
+		# Define POI as opponent's base location (different for each unit based on faction)
+		var points_of_interest: Array = []
+		if u.is_enemy:
+			# Enemy units target ally base
+			if ally_base and is_instance_valid(ally_base):
+				points_of_interest.append(ally_base.global_position)
+			else:
+				points_of_interest.append(Vector2(map_w * 0.5, map_h * 0.5))  # Fallback to center
+		else:
+			# Ally units target enemy base
+			if enemy_base and is_instance_valid(enemy_base):
+				points_of_interest.append(enemy_base.global_position)
+			else:
+				points_of_interest.append(Vector2(map_w * 0.5, map_h * 0.5))  # Fallback to center
+
 		# Get closest allies and enemies (10 each for spatial awareness)
 		var closest_allies = _get_closest_units(u, all_units, false, 10)  # 10 closest allies
 		var closest_enemies = _get_closest_units(u, all_units, true, 10)   # 10 closest enemies
@@ -482,18 +551,25 @@ func _ai_request_reset() -> void:
 	episode_count += 1
 	swap_spawn_sides = (episode_count % 2 == 1)  # Swap on odd episodes
 
+	# Remove all existing bases
+	if ally_base and is_instance_valid(ally_base):
+		ally_base.queue_free()
+	if enemy_base and is_instance_valid(enemy_base):
+		enemy_base.queue_free()
+
 	# Remove all existing units
 	for u in get_tree().get_nodes_in_group("units"):
 		u.queue_free()
 
-	# Wait for units to be removed
+	# Wait for units and bases to be removed
 	await get_tree().process_frame
 
 	# Reset unit ID counter to start fresh
 	Global.next_unit_id = 1
 
-	# Respawn all units using the reusable function
-	print("Respawning units (episode ", episode_count, ")...")
+	# Respawn bases and units using the reusable functions
+	print("Respawning bases and units (episode ", episode_count, ")...")
+	spawn_bases()
 	spawn_all_units()
 
 	# Refresh units array
