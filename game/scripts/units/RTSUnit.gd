@@ -19,7 +19,7 @@ class_name RTSUnit
 @export var unit_id: String = ""     # Unique ID (e.g., "u25", "u87")
 @export var type_id: int = 0         # Unit type (0=Infantry, 1=Sniper)
 @export var max_hp: int = 100        # Maximum health points
-var hp: int = max_hp                 # Current health points
+var hp: int                          # Current health points (set in _ready)
 
 # AI policy assignment for multi-policy training
 # Determines which neural network model controls this unit
@@ -73,18 +73,19 @@ func _ready() -> void:
 		# Enemies are not selectable / don't respond to player input
 		selected = false
 		set_selected(selected)
-		# Apply red tint while preserving unit-specific colors
-		var current_color = modulate
-		modulate = Color(current_color.r * 1.0, current_color.g * 0.314, current_color.b * 0.335, 1.0)
+		# Apply red tint to sprites only (not healthbar/UI)
+		_apply_enemy_tint()
 	else:
 		add_to_group("ally")
+
+	# Set current HP to match max HP before updating the HP bar
+	hp = max_hp
 	_update_hp_bar()
 
 	set_selected(selected)
 	add_to_group("units", true)
 	print("Unit ", unit_id, " final stats: HP=", max_hp, " Range=", attack_range, " Damage=", attack_damage, " Speed=", Speed, " Policy=", policy_id)
 	print("Unit ", unit_id, " added to groups: ", get_groups())
-	hp = max_hp
 	target = global_position
 	target_click = global_position  # Initialize both targets to current position
 
@@ -107,6 +108,17 @@ func _assign_policy() -> void:
 		policy_id = "policy_GT50"  # Enemy team policy
 	else:
 		policy_id = "policy_LT50"  # Ally team policy
+
+func _apply_enemy_tint() -> void:
+	"""
+	Apply red tint to sprite nodes only (not healthbar/UI).
+	Preserves unit-specific colors while adding enemy team identification.
+	"""
+	# Apply red tint to all Sprite2D children
+	for child in get_children():
+		if child is Sprite2D:
+			var current_color = child.modulate
+			child.modulate = Color(current_color.r * 1.0, current_color.g * 0.314, current_color.b * 0.335, 1.0)
 
 func set_policy(new_policy_id: String) -> void:
 	"""
@@ -153,6 +165,9 @@ func _draw():
 	"""Draw debug lines to POIs, allies, and enemies when unit is selected"""
 	if not selected or is_enemy:  # Only draw for selected ally units
 		return
+
+	# Draw attack range circle (semi-transparent white)
+	draw_arc(Vector2.ZERO, attack_range, 0, TAU, 64, Color(1.0, 1.0, 1.0, 0.3), 2.0, true)
 
 	# Always draw lines to POIs (yellow)
 	for poi in poi_positions:

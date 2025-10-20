@@ -134,6 +134,12 @@ if __name__ == "__main__":
     print("Observation space defined:", OBS_SPACE)
     print("Action space defined:", ACT_SPACE)
 
+    # Configure which policies to train (can be changed at any time)
+    # Set to subset of policy names to freeze specific policies
+    POLICIES_TO_TRAIN = ["policy_LT50", "policy_GT50", "policy_frontline"]  # All trainable by default
+    print(f"\nTraining configuration: {POLICIES_TO_TRAIN}")
+    print(f"Frozen policies: {[p for p in POLICIES.keys() if p not in POLICIES_TO_TRAIN]}\n")
+
     # PPO configuration for 3-policy multi-agent RTS training
     # Architecture: Single worker with 100 agents split across 3 policies
     cfg = (
@@ -168,11 +174,11 @@ if __name__ == "__main__":
             vf_clip_param=10.0,     # Value function clip parameter
             use_gae=True,           # Use Generalized Advantage Estimation
             lambda_=0.9,            # GAE lambda parameter (bias-variance tradeoff)
-            entropy_coeff=0.01,    # Entropy bonus for exploration (increased for more randomness)
+            entropy_coeff=0.1,    # Entropy bonus for exploration (increased for more randomness)
         )
         .rl_module(
             model_config={
-                "fcnet_hiddens": [64,64,64],                    # 3-layer MLP, known to work: [64,64,64] with 89dim obs space
+                "fcnet_hiddens": [128,256,128],                    # 3-layer MLP, known to work: [64,64,64] with 89dim obs space
                 "fcnet_activation": "tanh",                     # Tanh activation function
                 "fcnet_weights_initializer": "xavier_uniform_", # Xavier uniform weight init
                 "fcnet_bias_initializer": "zeros_",             # Zero bias initialization
@@ -181,13 +187,13 @@ if __name__ == "__main__":
         .multi_agent(
             policies={"policy_LT50", "policy_GT50", "policy_frontline"},
             policy_mapping_fn=policy_mapping_fn,
-            # Train policy_LT50 only, keep GT50 and frontline frozen
-            # Note: User can change policies_to_train to enable/disable training per policy
-            policies_to_train=["policy_LT50", "policy_GT50", "policy_frontline"],
+            # Use POLICIES_TO_TRAIN variable to control which policies are trained
+            # Policies not in this list will be frozen (inference only, no gradient updates)
+            policies_to_train=POLICIES_TO_TRAIN,
             count_steps_by="agent_steps",  # Count steps per agent (not env steps)
         )
         .resources(
-            num_gpus=0,  # CPU-only training (set to 1 for GPU acceleration)
+            num_gpus=1,  # CPU-only training (set to 1 for GPU acceleration)
             num_cpus_for_main_process=4,  # Allocate 4 CPU cores for training
         )
         .reporting(
@@ -304,31 +310,35 @@ if __name__ == "__main__":
             if learners:
                 print("  Learner metrics found")
                 print(f"  Available policies in learners: {list(learners.keys())}")
+
+                # Dynamically determine labels based on POLICIES_TO_TRAIN configuration
                 # The structure might be nested differently
                 if "policy_LT50" in learners:
                     lt50_stats = learners["policy_LT50"]
-                    print(f"    [LT50 TRAINABLE] Policy loss: {lt50_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [LT50 TRAINABLE] VF loss: {lt50_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [LT50 TRAINABLE] Entropy: {lt50_stats.get('entropy', 'N/A')}")
-                else:
-                    print("    WARNING: policy_LT50 not found in learners!")
+                    lt50_label = "LT50 TRAINABLE" if "policy_LT50" in POLICIES_TO_TRAIN else "LT50 FROZEN"
+                    print(f"    [{lt50_label}] Policy loss: {lt50_stats.get('policy_loss', 'N/A')}")
+                    print(f"    [{lt50_label}] VF loss: {lt50_stats.get('vf_loss', 'N/A')}")
+                    print(f"    [{lt50_label}] Entropy: {lt50_stats.get('entropy', 'N/A')}")
+                    if "policy_LT50" not in POLICIES_TO_TRAIN:
+                        print(f"    WARNING: policy_LT50 appears in learners but is configured as FROZEN!")
 
                 if "policy_frontline" in learners:
                     frontline_stats = learners["policy_frontline"]
-                    print(f"    [FRONTLINE TRAINABLE] Policy loss: {frontline_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [FRONTLINE TRAINABLE] VF loss: {frontline_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [FRONTLINE TRAINABLE] Entropy: {frontline_stats.get('entropy', 'N/A')}")
-                else:
-                    print("    WARNING: policy_frontline not found in learners!")
+                    frontline_label = "FRONTLINE TRAINABLE" if "policy_frontline" in POLICIES_TO_TRAIN else "FRONTLINE FROZEN"
+                    print(f"    [{frontline_label}] Policy loss: {frontline_stats.get('policy_loss', 'N/A')}")
+                    print(f"    [{frontline_label}] VF loss: {frontline_stats.get('vf_loss', 'N/A')}")
+                    print(f"    [{frontline_label}] Entropy: {frontline_stats.get('entropy', 'N/A')}")
+                    if "policy_frontline" not in POLICIES_TO_TRAIN:
+                        print(f"    WARNING: policy_frontline appears in learners but is configured as FROZEN!")
 
                 if "policy_GT50" in learners:
                     gt50_stats = learners["policy_GT50"]
-                    print(f"    [GT50 FROZEN] Policy loss: {gt50_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [GT50 FROZEN] VF loss: {gt50_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [GT50 FROZEN] Entropy: {gt50_stats.get('entropy', 'N/A')}")
-                    print(f"    WARNING: GT50 should NOT appear in learners if frozen!")
-                else:
-                    print(f"    [OK] GT50 not in learners (correctly frozen)")
+                    gt50_label = "GT50 TRAINABLE" if "policy_GT50" in POLICIES_TO_TRAIN else "GT50 FROZEN"
+                    print(f"    [{gt50_label}] Policy loss: {gt50_stats.get('policy_loss', 'N/A')}")
+                    print(f"    [{gt50_label}] VF loss: {gt50_stats.get('vf_loss', 'N/A')}")
+                    print(f"    [{gt50_label}] Entropy: {gt50_stats.get('entropy', 'N/A')}")
+                    if "policy_GT50" not in POLICIES_TO_TRAIN:
+                        print(f"    WARNING: policy_GT50 appears in learners but is configured as FROZEN!")
 
                 if "default_policy" in learners:
                     default_stats = learners["default_policy"]

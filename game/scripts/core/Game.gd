@@ -23,8 +23,8 @@ var episode_ended: bool = false  # True when episode terminates
 var max_episode_steps: int = 500  # Maximum AI steps per episode
 
 # Unit configuration
-var num_ally_units_start = 50   # Number of ally units to spawn
-var num_enemy_units_start = 50  # Number of enemy units to spawn
+var num_ally_units_start = 100   # Number of ally units to spawn
+var num_enemy_units_start = 100  # Number of enemy units to spawn
 
 # AI control toggle (N key = AI, M key = manual)
 var ai_controls_allies: bool = true  # Whether AI controls ally units
@@ -105,7 +105,7 @@ func spawn_all_units():
 	var spawnbox_start_y_2 = 100
 
 	var spawn_spacing_x = 250
-	var spawn_spacing_y = 133
+	var spawn_spacing_y = 133/2
 
 	# Determine spawn positions based on swap_spawn_sides
 	var ally_x = spawnbox_start_x_1 if not swap_spawn_sides else spawnbox_start_x_2
@@ -246,7 +246,7 @@ func _physics_process(_delta: float) -> void:
 				var dist_to_objective: float = u.global_position.distance_to(enemy_base_pos)
 				var max_dist: float = 1280.0  # Map width
 				var normalized_dist: float = clamp(dist_to_objective / max_dist, 0.0, 1.0)
-				var position_reward = 0.5 * (1.0 - normalized_dist)  # +0.5 at base, 0.0 at far edge
+				var position_reward = 1.5 * (1.0 - normalized_dist)  # +0.5 at base, 0.0 at far edge
 				reward += position_reward
 
 				# Small baseline reward for staying alive
@@ -301,14 +301,16 @@ func _build_observation() -> Dictionary:
 		var points_of_interest: Array = []
 		if u.is_enemy:
 			# Enemy units target ally base
-			if ally_base and is_instance_valid(ally_base):
+			if enemy_base and is_instance_valid(enemy_base) and ally_base and is_instance_valid(ally_base):
 				points_of_interest.append(ally_base.global_position)
+				points_of_interest.append(enemy_base.global_position)
 			else:
 				points_of_interest.append(Vector2(map_w * 0.5, map_h * 0.5))  # Fallback to center
 		else:
 			# Ally units target enemy base
-			if enemy_base and is_instance_valid(enemy_base):
+			if enemy_base and is_instance_valid(enemy_base) and ally_base and is_instance_valid(ally_base):
 				points_of_interest.append(enemy_base.global_position)
+				points_of_interest.append(ally_base.global_position)
 			else:
 				points_of_interest.append(Vector2(map_w * 0.5, map_h * 0.5))  # Fallback to center
 

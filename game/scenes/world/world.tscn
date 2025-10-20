@@ -23,7 +23,8 @@ y_sort_enabled = true
 script = ExtResource("1_1fp7r")
 
 [node name="Camera" type="Camera2D" parent="."]
-position = Vector2(632, 366)
+position = Vector2(1280, 720)
+zoom = Vector2(0.5, 0.5)
 script = ExtResource("2_v5dby")
 
 [node name="UI" parent="." instance=ExtResource("3_bq33v")]

@@ -419,7 +419,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             else:
                 action = 0  # Default action
 
-            stepsize = 30
+            stepsize = 60
             # Map action to movement
             moves = [
                 [0, 0],    # 0: no move
