@@ -43,6 +43,32 @@ var base_scene = preload("res://scenes/buildings/base.tscn")
 var ally_base: Node = null
 var enemy_base: Node = null
 
+# Reward configuration - adjust these to tune AI behavior
+# Combat rewards
+var reward_damage_to_unit: float = 0.1       # Reward per damage point to enemy units
+var reward_damage_to_base: float = 0.5       # Reward per damage point to enemy base
+var reward_unit_kill: float = 15.0           # Reward for killing an enemy unit
+var reward_base_kill: float = 200.0          # Reward for destroying enemy base
+var penalty_damage_received: float = 0.1     # Penalty per damage point received
+var penalty_death: float = 5.0               # Penalty for dying
+
+# Team outcome rewards
+var reward_team_victory: float = 50.0        # Bonus when your team wins
+var penalty_team_defeat: float = 25.0        # Penalty when your team loses
+
+# Positional rewards
+var reward_position_multiplier: float = 1.5  # Multiplier for proximity to enemy base (0.5 at base, 0.0 at far edge)
+
+# Survival reward
+var reward_alive_per_step: float = 0.01      # Small reward for staying alive each step
+
+# Movement efficiency rewards
+var reward_continue_straight: float = 0.05   # Reward for maintaining direction (0° angle)
+var penalty_reverse_direction: float = 0.1   # Penalty for reversing direction (180° angle)
+
+# Base damage penalty (applied to entire team when their base takes damage)
+var penalty_base_damage_per_unit: float = 0.05  # Penalty per damage point to your base, divided among all units
+
 func _ready() -> void:
 	spawn_bases()
 	init_units()
@@ -220,6 +246,18 @@ func _physics_process(_delta: float) -> void:
 			var rewards := {}
 			var dones := {}
 
+			# Calculate base damage penalties for teams
+			var ally_base_damage_penalty: float = 0.0
+			var enemy_base_damage_penalty: float = 0.0
+
+			if ally_base and is_instance_valid(ally_base):
+				if ally_base.damage_taken_this_step > 0:
+					ally_base_damage_penalty = ally_base.damage_taken_this_step * penalty_base_damage_per_unit
+
+			if enemy_base and is_instance_valid(enemy_base):
+				if enemy_base.damage_taken_this_step > 0:
+					enemy_base_damage_penalty = enemy_base.damage_taken_this_step * penalty_base_damage_per_unit
+
 			# Check for victory/defeat conditions
 			var ally_units = get_tree().get_nodes_in_group("ally")
 			var enemy_units = get_tree().get_nodes_in_group("enemy")
@@ -249,24 +287,23 @@ func _physics_process(_delta: float) -> void:
 				var reward: float = 0.0
 
 				# Combat-based rewards (primary)
-				reward += u.damage_dealt_this_step * 0.1      # +0.1 per damage point to units
-				reward += u.damage_to_base_this_step * 0.5    # +0.5 per damage point to base (5× more valuable!)
-				reward += u.kills_this_step * 15.0            # +15.0 per unit kill
-				reward += u.base_kills_this_step * 200.0      # +200.0 per base kill (HUGE reward!)
-				reward -= u.damage_received_this_step * 0.1   # -0.1 per damage point received
+				reward += u.damage_dealt_this_step * reward_damage_to_unit
+				reward += u.damage_to_base_this_step * reward_damage_to_base
+				reward += u.kills_this_step * reward_unit_kill
+				reward += u.base_kills_this_step * reward_base_kill
+				reward -= u.damage_received_this_step * penalty_damage_received
 				if u.died_this_step:
-					reward -= 5.0  # -5.0 for dying
+					reward -= penalty_death
 
-				# Individual victory/defeat rewards (reduced to emphasize individual contribution)
-				# Each unit gets rewarded/penalized based on their team's outcome
+				# Team outcome rewards
 				if game_won and not u.is_enemy:
-					reward += 50.0  # Team victory bonus for ally (reduced from 100.0)
+					reward += reward_team_victory
 				elif game_lost and not u.is_enemy:
-					reward -= 25.0  # Team defeat penalty for ally (reduced from -50.0)
+					reward -= penalty_team_defeat
 				elif game_won and u.is_enemy:
-					reward -= 25.0  # Team defeat penalty for enemy (reduced from -50.0)
+					reward -= penalty_team_defeat
 				elif game_lost and u.is_enemy:
-					reward += 50.0  # Team victory bonus for enemy (reduced from 100.0)
+					reward += reward_team_victory
 
 				# Positional reward: encourage moving toward enemy base (objective-focused)
 				var enemy_base_pos: Vector2
@@ -280,12 +317,21 @@ func _physics_process(_delta: float) -> void:
 				var dist_to_objective: float = u.global_position.distance_to(enemy_base_pos)
 				var max_dist: float = 1280.0  # Map width
 				var normalized_dist: float = clamp(dist_to_objective / max_dist, 0.0, 1.0)
-				var position_reward = 1.5 * (1.0 - normalized_dist)  # +0.5 at base, 0.0 at far edge
+				var position_reward = reward_position_multiplier * (1.0 - normalized_dist)
 				reward += position_reward
 
-				# Small baseline reward for staying alive
+				# Survival reward
 				if not u.died_this_step:
-					reward += 0.01
+					reward += reward_alive_per_step
+
+				# Movement efficiency reward/penalty
+				reward += u.direction_change_reward
+
+				# Base damage penalty (shared by entire team)
+				if not u.is_enemy:
+					reward -= ally_base_damage_penalty
+				else:
+					reward -= enemy_base_damage_penalty
 
 				rewards[u.unit_id] = reward
 				dones[u.unit_id] = should_end_episode
@@ -296,6 +342,12 @@ func _physics_process(_delta: float) -> void:
 			# CRITICAL: Send rewards immediately after observation, don't wait
 			#print("Game: Sending rewards - should_end_episode: ", should_end_episode, " dones: ", dones)
 			AiServer.send_reward(0.0, should_end_episode, {"rewards": rewards, "dones": dones})
+
+			# Reset base damage tracking for next step
+			if ally_base and is_instance_valid(ally_base):
+				ally_base.reset_damage_tracking()
+			if enemy_base and is_instance_valid(enemy_base):
+				enemy_base.reset_damage_tracking()
 
 			# Force process to ensure message is sent immediately
 			await get_tree().process_frame
@@ -547,7 +599,34 @@ func _apply_actions(actions: Dictionary) -> void:
 			if p.size() >= 2:
 				var tx: float = float(p[0])
 				var ty: float = float(p[1])
-				u.set_move_target(Vector2(tx, ty))
+				var new_target = Vector2(tx, ty)
+
+				# Calculate direction change reward/penalty
+				var new_direction = (new_target - u.global_position).normalized()
+
+				# Only calculate if we have a previous direction and both directions are non-zero
+				if u.previous_move_direction.length_squared() > 0.01 and new_direction.length_squared() > 0.01:
+					# Calculate dot product to get cosine of angle
+					var dot = u.previous_move_direction.dot(new_direction)
+					dot = clamp(dot, -1.0, 1.0)  # Clamp for numerical stability
+
+					# Convert to angle in degrees
+					var angle_rad = acos(dot)
+					var angle_deg = rad_to_deg(angle_rad)
+
+					# Linear interpolation using configurable values
+					# reward_continue_straight at 0° to -penalty_reverse_direction at 180°
+					var reward_range = reward_continue_straight + penalty_reverse_direction
+					u.direction_change_reward = reward_continue_straight - (angle_deg / 180.0) * reward_range
+				else:
+					# No penalty for first move or stationary units
+					u.direction_change_reward = 0.0
+
+				# Store current direction for next comparison
+				if new_direction.length_squared() > 0.01:
+					u.previous_move_direction = new_direction
+
+				u.set_move_target(new_target)
 
 func _get_unit(id: String) -> RTSUnit:
 	for u: RTSUnit in get_tree().get_nodes_in_group("units"):

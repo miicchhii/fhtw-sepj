@@ -19,6 +19,9 @@ var hp: int = max_hp                  # Current health
 # Reference to game controller
 var game_node: Node = null
 
+# Damage tracking for reward calculation
+var damage_taken_this_step: int = 0   # Damage received this AI step
+
 func _ready() -> void:
 	# Add to appropriate team group
 	if is_enemy:
@@ -52,6 +55,9 @@ func apply_damage(amount: int, attacker: Node = null) -> void:
 
 	print("Base (", "enemy" if is_enemy else "ally", ") took ", actual_damage, " damage. HP: ", hp, "/", max_hp)
 
+	# Track damage taken this step (for team penalty calculation)
+	damage_taken_this_step += actual_damage
+
 	# Track damage dealt by the attacker (for reward calculation)
 	if attacker and is_instance_valid(attacker) and attacker.has_method("reset_combat_stats"):
 		attacker.damage_to_base_this_step += actual_damage  # Track base damage separately
@@ -64,6 +70,10 @@ func apply_damage(amount: int, attacker: Node = null) -> void:
 	# Check if base is destroyed
 	if hp <= 0:
 		_on_destroyed()
+
+func reset_damage_tracking() -> void:
+	"""Reset damage tracking for next AI step."""
+	damage_taken_this_step = 0
 
 func _update_hp_bar() -> void:
 	"""Update the visual health bar."""

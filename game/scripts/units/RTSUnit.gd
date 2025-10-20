@@ -60,6 +60,10 @@ var kills_this_step: int = 0             # Number of kills this step (units)
 var base_kills_this_step: int = 0        # Number of base kills this step (worth more)
 var died_this_step: bool = false         # True if unit died this step
 
+# Direction change tracking for movement efficiency reward
+var previous_move_direction: Vector2 = Vector2.ZERO  # Last movement direction vector
+var direction_change_reward: float = 0.0  # Reward/penalty for direction consistency
+
 func _ready() -> void:
 	# Set unit-specific stats first
 	_initialize_unit_stats()
@@ -315,6 +319,7 @@ func reset_combat_stats() -> void:
 	kills_this_step = 0
 	base_kills_this_step = 0
 	died_this_step = false
+	direction_change_reward = 0.0
 
 func _pick_enemy_in_range(radius: float) -> Node:
 	var best: Node = null
