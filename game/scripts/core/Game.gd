@@ -23,8 +23,8 @@ var episode_ended: bool = false  # True when episode terminates
 var max_episode_steps: int = 500  # Maximum AI steps per episode
 
 # Unit configuration
-var num_ally_units_start = 100   # Number of ally units to spawn
-var num_enemy_units_start = 100  # Number of enemy units to spawn
+var num_ally_units_start = 50   # Number of ally units to spawn
+var num_enemy_units_start = 50  # Number of enemy units to spawn
 
 # AI control toggle (N key = AI, M key = manual)
 var ai_controls_allies: bool = true  # Whether AI controls ally units
@@ -54,31 +54,63 @@ func _ready() -> void:
 
 func spawn_bases():
 	"""
-	Spawn ally and enemy bases on the map.
+	Spawn ally and enemy bases randomly within their respective halves of the map.
 
-	Bases are placed at strategic locations:
-	- Ally base: Left side of map
-	- Enemy base: Right side of map
+	Map halves (with spawn side alternation):
+	- Normal (even episodes): Ally left half, Enemy right half
+	- Swapped (odd episodes): Ally right half, Enemy left half
 
-	These positions swap when spawn_spawn_sides is true (odd episodes).
+	Random placement ensures varied strategic scenarios and prevents
+	position-specific learning.
 	"""
-	var base_y = map_h * 0.5  # Center vertically
-	var ally_base_x = 200 if not swap_spawn_sides else map_w - 200
-	var enemy_base_x = map_w - 200 if not swap_spawn_sides else 200
+	var rng = RandomNumberGenerator.new()
+	rng.randomize()
+
+	# Define safe margins from map edges (pixels)
+	var margin_x = 150  # Horizontal margin
+	var margin_y = 150  # Vertical margin
+
+	# Calculate team halves
+	var half_map_x = map_w / 2.0
+
+	# Determine which half each team spawns in
+	var ally_x_min: float
+	var ally_x_max: float
+	var enemy_x_min: float
+	var enemy_x_max: float
+
+	if not swap_spawn_sides:
+		# Normal: Ally left, Enemy right
+		ally_x_min = margin_x
+		ally_x_max = half_map_x - margin_x
+		enemy_x_min = half_map_x + margin_x
+		enemy_x_max = map_w - margin_x
+	else:
+		# Swapped: Ally right, Enemy left
+		ally_x_min = half_map_x + margin_x
+		ally_x_max = map_w - margin_x
+		enemy_x_min = margin_x
+		enemy_x_max = half_map_x - margin_x
+
+	# Random positions within team halves
+	var ally_base_x = rng.randf_range(ally_x_min, ally_x_max)
+	var ally_base_y = rng.randf_range(margin_y, map_h - margin_y)
+	var enemy_base_x = rng.randf_range(enemy_x_min, enemy_x_max)
+	var enemy_base_y = rng.randf_range(margin_y, map_h - margin_y)
 
 	# Spawn ally base
 	ally_base = base_scene.instantiate()
 	ally_base.is_enemy = false
-	ally_base.position = Vector2(ally_base_x, base_y)
+	ally_base.position = Vector2(ally_base_x, ally_base_y)
 	add_child(ally_base)
-	print("Spawned ally base at (", ally_base_x, ", ", base_y, ")")
+	print("Spawned ally base at (", ally_base_x, ", ", ally_base_y, ")")
 
 	# Spawn enemy base
 	enemy_base = base_scene.instantiate()
 	enemy_base.is_enemy = true
-	enemy_base.position = Vector2(enemy_base_x, base_y)
+	enemy_base.position = Vector2(enemy_base_x, enemy_base_y)
 	add_child(enemy_base)
-	print("Spawned enemy base at (", enemy_base_x, ", ", base_y, ")")
+	print("Spawned enemy base at (", enemy_base_x, ", ", enemy_base_y, ")")
 
 func spawn_all_units():
 	"""
@@ -104,8 +136,10 @@ func spawn_all_units():
 	var spawnbox_start_x_2 = map_w/2
 	var spawnbox_start_y_2 = 100
 
-	var spawn_spacing_x = 250
-	var spawn_spacing_y = 133/2
+	var spawn_spacing_x = 250/1
+	var spawn_spacing_y = 133/1
+
+	var spawn_rows = 5
 
 	# Determine spawn positions based on swap_spawn_sides
 	var ally_x = spawnbox_start_x_1 if not swap_spawn_sides else spawnbox_start_x_2
@@ -119,7 +153,7 @@ func spawn_all_units():
 	# Create ally units with sequential IDs (mix of infantry and snipers)
 	print("Creating ally units...")
 	for i in range(num_ally_units_start):
-		var pos = Vector2(ally_x + (i % 5) * spawn_spacing_x, ally_y + (i / 5) * spawn_spacing_y)
+		var pos = Vector2(ally_x + (i % spawn_rows) * spawn_spacing_x, ally_y + (i / spawn_rows) * spawn_spacing_y)
 		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
 		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, false, unit_type)
@@ -127,7 +161,7 @@ func spawn_all_units():
 	# Create enemy units with sequential IDs (mix of infantry and snipers)
 	print("Creating enemy units...")
 	for i in range(num_enemy_units_start):
-		var pos = Vector2(enemy_x + (i % 5) * spawn_spacing_x, enemy_y + (i / 5) * spawn_spacing_y)
+		var pos = Vector2(enemy_x + (i % spawn_rows) * spawn_spacing_x, enemy_y + (i / spawn_rows) * spawn_spacing_y)
 		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
 		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, true, unit_type)

@@ -37,28 +37,27 @@ tile_set = SubResource("TileSet_tlwt5")
 rendering_quadrant_size = 32
 
 [node name="Units" type="Node2D" parent="."]
-position = Vector2(103, 515)
+position = Vector2(117, 609)
 
 [node name="Units2" type="Node2D" parent="."]
 y_sort_enabled = true
 
 [node name="Objects" type="Node2D" parent="."]
 y_sort_enabled = true
-position = Vector2(-1, 12)
 
 [node name="Ressource" parent="Objects" instance=ExtResource("6_t5ptc")]
-position = Vector2(481, 162)
+position = Vector2(1278.0001, 294)
 scale = Vector2(4.92, 4.92)
 
 [node name="coinHouse" parent="Objects" instance=ExtResource("7_j2gmx")]
-position = Vector2(122, 385)
+position = Vector2(237.00003, 1245.0001)
 scale = Vector2(5.08, 5.08)
 
 [node name="Houses" type="Node2D" parent="."]
 y_sort_enabled = true
 
 [node name="robo_shop" parent="Houses" instance=ExtResource("7_bq33v")]
-position = Vector2(184, 211)
+position = Vector2(239.99998, 318)
 scale = Vector2(1.60395, 1.60395)
 
 [node name="Enemies" type="Node2D" parent="."]
