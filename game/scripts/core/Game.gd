@@ -63,8 +63,8 @@ var reward_position_multiplier: float = 1.5  # Multiplier for proximity to enemy
 var reward_alive_per_step: float = 0.01      # Small reward for staying alive each step
 
 # Movement efficiency rewards
-var reward_continue_straight: float = 0.05   # Reward for maintaining direction (0° angle)
-var penalty_reverse_direction: float = 0.1   # Penalty for reversing direction (180° angle)
+var reward_continue_straight: float = 0.1    # Reward for maintaining direction (0° angle)
+var penalty_reverse_direction: float = 0.2   # Penalty for reversing direction (180° angle)
 
 # Base damage penalty (applied to entire team when their base takes damage)
 var penalty_base_damage_per_unit: float = 0.05  # Penalty per damage point to your base, divided among all units
