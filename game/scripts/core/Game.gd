@@ -43,6 +43,9 @@ var base_scene = preload("res://scenes/buildings/base.tscn")
 var ally_base: Node = null
 var enemy_base: Node = null
 
+# Reward calculator (initialized in _ready)
+var reward_calculator: RewardCalculator = null
+
 # Reward configuration - initialized from GameConfig, can be tuned at runtime
 # Combat rewards
 var reward_damage_to_unit: float = GameConfig.REWARD_DAMAGE_TO_UNIT
@@ -74,6 +77,25 @@ var reward_tactical_spacing: float = GameConfig.REWARD_TACTICAL_SPACING
 var tactical_spacing_threshold: float = GameConfig.TACTICAL_SPACING_THRESHOLD
 
 func _ready() -> void:
+	# Initialize reward calculator with current reward configuration
+	reward_calculator = RewardCalculator.new(
+		reward_damage_to_unit,
+		reward_damage_to_base,
+		reward_unit_kill,
+		reward_base_kill,
+		penalty_damage_received,
+		penalty_death,
+		reward_team_victory,
+		penalty_team_defeat,
+		reward_position_multiplier,
+		reward_alive_per_step,
+		reward_continue_straight,
+		penalty_reverse_direction,
+		penalty_base_damage_per_unit,
+		reward_tactical_spacing,
+		tactical_spacing_threshold
+	)
+
 	spawn_bases()
 	init_units()
 	get_units()
@@ -246,22 +268,6 @@ func _physics_process(_delta: float) -> void:
 			#print("Game: Sending observation for AI step ", ai_step)
 			AiServer.send_observation(obs)
 
-			var center := GameConfig.get_map_center()
-			var rewards := {}
-			var dones := {}
-
-			# Calculate base damage penalties for teams
-			var ally_base_damage_penalty: float = 0.0
-			var enemy_base_damage_penalty: float = 0.0
-
-			if ally_base and is_instance_valid(ally_base):
-				if ally_base.damage_taken_this_step > 0:
-					ally_base_damage_penalty = ally_base.damage_taken_this_step * penalty_base_damage_per_unit
-
-			if enemy_base and is_instance_valid(enemy_base):
-				if enemy_base.damage_taken_this_step > 0:
-					enemy_base_damage_penalty = enemy_base.damage_taken_this_step * penalty_base_damage_per_unit
-
 			# Check for victory/defeat conditions
 			var ally_units = get_tree().get_nodes_in_group("ally")
 			var enemy_units = get_tree().get_nodes_in_group("enemy")
@@ -278,97 +284,22 @@ func _physics_process(_delta: float) -> void:
 			# Check for episode end condition
 			var should_end_episode = (ai_step >= max_episode_steps) or game_won or game_lost
 
-			# DEBUG: Log episode termination variables
-			#print("Game: Episode termination check - ai_step=", ai_step, " max_episode_steps=", max_episode_steps, " should_end_episode=", should_end_episode, " episode_ended=", episode_ended)
+			# Calculate rewards using RewardCalculator
+			var all_units = get_tree().get_nodes_in_group("units")
+			var rewards = reward_calculator.calculate_rewards(
+				all_units,
+				ally_base,
+				enemy_base,
+				ai_controls_allies,
+				game_won,
+				game_lost,
+				GameConfig.get_map_center()
+			)
 
-			for u: RTSUnit in get_tree().get_nodes_in_group("units"):
-				# Skip reward calculation for manually controlled ally units
-				# Only calculate rewards for AI-controlled units (enemies + allies when AI is enabled)
-				if not u.is_enemy and not ai_controls_allies:
-					u.reset_combat_stats()  # Still reset stats to avoid accumulation
-					continue
-
-				var reward: float = 0.0
-
-				# Combat-based rewards (primary)
-				reward += u.damage_dealt_this_step * reward_damage_to_unit
-				reward += u.damage_to_base_this_step * reward_damage_to_base
-				reward += u.kills_this_step * reward_unit_kill
-				reward += u.base_kills_this_step * reward_base_kill
-				reward -= u.damage_received_this_step * penalty_damage_received
-				if u.died_this_step:
-					reward -= penalty_death
-
-				# Team outcome rewards
-				if game_won and not u.is_enemy:
-					reward += reward_team_victory
-				elif game_lost and not u.is_enemy:
-					reward -= penalty_team_defeat
-				elif game_won and u.is_enemy:
-					reward -= penalty_team_defeat
-				elif game_lost and u.is_enemy:
-					reward += reward_team_victory
-
-				# Positional reward: encourage moving toward enemy base (objective-focused)
-				var enemy_base_pos: Vector2
-				if u.is_enemy and ally_base and is_instance_valid(ally_base):
-					enemy_base_pos = ally_base.global_position
-				elif not u.is_enemy and enemy_base and is_instance_valid(enemy_base):
-					enemy_base_pos = enemy_base.global_position
-				else:
-					enemy_base_pos = center  # Fallback to center if base destroyed
-
-				var dist_to_objective: float = u.global_position.distance_to(enemy_base_pos)
-				var max_dist: float = 1280.0  # Map width
-				var normalized_dist: float = clamp(dist_to_objective / max_dist, 0.0, 1.0)
-				var position_reward = reward_position_multiplier * (1.0 - normalized_dist)
-				reward += position_reward
-
-				# Survival reward
-				if not u.died_this_step:
-					reward += reward_alive_per_step
-
-				# Movement efficiency reward/penalty
-				reward += u.direction_change_reward
-
-				# Base damage penalty (shared by entire team)
-				if not u.is_enemy:
-					reward -= ally_base_damage_penalty
-				else:
-					reward -= enemy_base_damage_penalty
-
-				# Tactical spacing: Penalize for each ally too close (stacking penalty)
-				var spacing_penalty: float = 0.0
-				var nearby_ally_count: int = 0
-
-				for other_unit in get_tree().get_nodes_in_group("units"):
-					if other_unit == u:
-						continue  # Skip self
-
-					# Check if same faction
-					if other_unit.is_enemy != u.is_enemy:
-						continue  # Only care about allies
-
-					var distance = u.global_position.distance_to(other_unit.global_position)
-
-					if distance < tactical_spacing_threshold:
-						# Calculate penalty based on how close they are
-						# Closer = bigger penalty
-						var proximity_ratio = 1.0 - (distance / tactical_spacing_threshold)
-						spacing_penalty += reward_tactical_spacing * proximity_ratio
-						nearby_ally_count += 1
-
-				reward -= spacing_penalty
-
-				# Optional: Debug log for tuning (comment out after testing)
-				# if nearby_ally_count > 3:
-				# 	print("Unit ", u.unit_id, " has ", nearby_ally_count, " allies too close, penalty: ", spacing_penalty)
-
-				rewards[u.unit_id] = reward
+			# Build dones dictionary
+			var dones := {}
+			for u in all_units:
 				dones[u.unit_id] = should_end_episode
-
-				# Reset combat stats for next step
-				u.reset_combat_stats()
 
 			# CRITICAL: Send rewards immediately after observation, don't wait
 			#print("Game: Sending rewards - should_end_episode: ", should_end_episode, " dones: ", dones)
