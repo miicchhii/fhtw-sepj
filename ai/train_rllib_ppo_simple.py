@@ -245,7 +245,7 @@ if __name__ == "__main__":
     print("="*50 + "\n")
 
     try:
-        for i in range(200):
+        for i in range(20000):
             current_iteration = next_iteration + i
             print(f"\n--- Training iteration {current_iteration} (loop {i+1}) ---")
 

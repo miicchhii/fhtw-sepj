@@ -45,8 +45,8 @@ var enemy_base: Node = null
 
 # Reward configuration - adjust these to tune AI behavior
 # Combat rewards
-var reward_damage_to_unit: float = 0.1       # Reward per damage point to enemy units
-var reward_damage_to_base: float = 0.5       # Reward per damage point to enemy base
+var reward_damage_to_unit: float = 0.2       # Reward per damage point to enemy units
+var reward_damage_to_base: float = 1.0       # Reward per damage point to enemy base
 var reward_unit_kill: float = 15.0           # Reward for killing an enemy unit
 var reward_base_kill: float = 200.0          # Reward for destroying enemy base
 var penalty_damage_received: float = 0.1     # Penalty per damage point received
@@ -63,11 +63,11 @@ var reward_position_multiplier: float = 1.5  # Multiplier for proximity to enemy
 var reward_alive_per_step: float = 0.01      # Small reward for staying alive each step
 
 # Movement efficiency rewards
-var reward_continue_straight: float = 0.1    # Reward for maintaining direction (0° angle)
-var penalty_reverse_direction: float = 0.2   # Penalty for reversing direction (180° angle)
+var reward_continue_straight: float = 0.5    # Reward for maintaining direction (0° angle)
+var penalty_reverse_direction: float = 1   # Penalty for reversing direction (180° angle)
 
 # Base damage penalty (applied to entire team when their base takes damage)
-var penalty_base_damage_per_unit: float = 0.05  # Penalty per damage point to your base, divided among all units
+var penalty_base_damage_per_unit: float = 0.5  # Penalty per damage point to your base, divided among all units
 
 func _ready() -> void:
 	spawn_bases()
@@ -362,21 +362,27 @@ func _build_observation() -> Dictionary:
 	"""
 	Build observation dictionary for all units to send to Python training.
 
-	Observation structure (92 dimensions per unit):
-	- Unit metadata: id, policy_id, type_id, hp, max_hp, position, faction
-	- Battle stats: attack_range, attack_damage, attack_cooldown, remaining_cooldown, speed
-	- Closest 10 allies: direction (2D), distance, hp_ratio (4 values × 10 = 40 dimensions)
-	- Closest 10 enemies: direction (2D), distance, hp_ratio (4 values × 10 = 40 dimensions)
-	- Points of interest: direction (2D), distance (3 values × 1 POI = 3 dimensions)
+	Observation structure (94 dimensions per unit):
+	- Base (3): vel_x, vel_y, hp_ratio
+	- Battle stats (5): attack_range, attack_damage, attack_cooldown, remaining_cooldown, speed
+	- Closest 10 allies (40): direction (2D), distance, hp_ratio (4 values × 10)
+	- Closest 10 enemies (40): direction (2D), distance, hp_ratio (4 values × 10)
+	- Points of interest (6): 2 POIs × (direction (2D), distance) = enemy base + own base
 
 	The observation is sent to godot_multi_env.py which converts it to the RLlib format
-	(92-dimensional Box space normalized to [-1, 1]).
+	(94-dimensional Box space normalized to appropriate ranges).
+
+	Note: Velocity replaces absolute position to prevent position-specific learning and
+	enable direction consistency rewards. Velocity reflects actual achieved movement
+	after collisions (from Godot's move_and_slide). This allows the AI to:
+	1. Learn position-invariant strategies (no "always go left" bias)
+	2. See its own previous movement direction for smooth trajectory learning
 
 	Returns:
 		Dictionary with keys:
 		- ai_step: Current AI step counter (independent of physics ticks)
 		- tick: Physics tick counter (60 ticks per second)
-		- map: Map dimensions {w: 1280, h: 720}
+		- map: Map dimensions {w: 2560, h: 1440}
 		- units: Array of unit observation dictionaries
 	"""
 	var all_units = get_tree().get_nodes_in_group("units")
@@ -438,7 +444,7 @@ func _build_observation() -> Dictionary:
 			"type_id": u.type_id,
 			"hp": u.hp,
 			"max_hp": u.max_hp,
-			"pos": [u.global_position.x, u.global_position.y],
+			"velocity": [u.velocity.x, u.velocity.y],  # Actual achieved velocity (collision-aware)
 			"is_enemy": u.is_enemy,
 			# Battle stats
 			"attack_range": u.attack_range,
@@ -564,13 +570,21 @@ func _apply_actions(actions: Dictionary) -> void:
 	"""
 	Apply movement actions from Python AI to Godot units.
 
-	Receives actions from godot_multi_env.py which converts the discrete action
-	space (9 discrete actions: 8 directions + stay) into continuous movement targets.
+	Receives actions from godot_multi_env.py using continuous 2D action space.
+	Actions are [dx, dy] vectors in range [-1, 1] where:
+	- Direction: Normalized vector direction (e.g., [1,1] → 45° northeast)
+	- Magnitude: Fraction of full step to take (e.g., |[1,1]| = 1.41 → clamped to 1.0 = full step)
+
+	Examples:
+	- [1.0, 1.0]: Full step (200px) at 45° northeast
+	- [0.0, 1.0]: Full step (200px) straight north
+	- [0.5, 0.5]: 71% step (141px) at 45° northeast
+	- [0.5, 0.0]: Half step (100px) straight east
 
 	Action format from Python:
 	{
-		"u1": {"move": [x, y]},
-		"u2": {"move": [x, y]},
+		"u1": {"move_vector": [dx, dy]},
+		"u2": {"move_vector": [dx, dy]},
 		...
 	}
 
@@ -578,9 +592,9 @@ func _apply_actions(actions: Dictionary) -> void:
 	for ally units. Enemy units are always AI-controlled.
 
 	Args:
-		actions: Dictionary mapping unit IDs to action dictionaries
+		actions: Dictionary mapping unit IDs to action dictionaries with move_vector
 	"""
-	# actions expected shape: { "u1": {"move":[x,y]}, ... }
+	# actions expected shape: { "u1": {"move_vector":[dx, dy]}, ... }
 	for id_var in actions.keys():
 		var id: String = String(id_var)
 
@@ -594,12 +608,36 @@ func _apply_actions(actions: Dictionary) -> void:
 			continue  # Skip AI actions for ally units when in manual control mode
 
 		var a := actions[id] as Dictionary
-		if a.has("move"):
-			var p := a["move"] as Array
-			if p.size() >= 2:
-				var tx: float = float(p[0])
-				var ty: float = float(p[1])
-				var new_target = Vector2(tx, ty)
+		if a.has("move_vector"):
+			var vec := a["move_vector"] as Array
+			if vec.size() >= 2:
+				var dx: float = float(vec[0])
+				var dy: float = float(vec[1])
+
+				# Interpret action as: direction (normalized) + magnitude (fraction of full step)
+				var action_vector = Vector2(dx, dy)
+				var action_magnitude = action_vector.length()
+
+				# Maximum movement distance per AI step
+				var stepsize: float = 200.0
+
+				# Calculate movement offset
+				var move_offset: Vector2
+				if action_magnitude > 0.01:  # Avoid division by zero
+					# Normalize direction, then scale by magnitude fraction (clamped to 1.0)
+					var direction = action_vector.normalized()
+					var step_fraction = min(action_magnitude, 1.0)  # Clamp to max 1.0
+					move_offset = direction * (step_fraction * stepsize)
+				else:
+					# Zero or near-zero action = no movement
+					move_offset = Vector2.ZERO
+
+				# Calculate new target position from current position
+				var new_target = u.global_position + move_offset
+
+				# Clamp to map boundaries
+				new_target.x = clamp(new_target.x, 0, map_w)
+				new_target.y = clamp(new_target.y, 0, map_h)
 
 				# Calculate direction change reward/penalty
 				var new_direction = (new_target - u.global_position).normalized()

@@ -57,8 +57,13 @@ This project implements a multi-agent reinforcement learning system where AI age
 
 ### Training Parameters
 - **Algorithm**: PPO with new Ray RLlib API stack
-- **Observation Space**: 92-dimensional vector (position, HP, battle stats, nearby units, POIs)
-- **Action Space**: Discrete(9) - 8 directional movements + stay
+- **Observation Space**: 94-dimensional vector (velocity, HP, battle stats, nearby units, 2 POIs)
+  - Base (3): vel_x, vel_y, hp_ratio
+  - Battle stats (5): attack_range, attack_damage, attack_cooldown, cooldown_remaining, speed
+  - Closest allies (40): 10 × (direction_x, direction_y, distance, hp_ratio)
+  - Closest enemies (40): 10 × (direction_x, direction_y, distance, hp_ratio)
+  - Points of interest (6): 2 POIs × (direction_x, direction_y, distance) - enemy base and own base
+- **Action Space**: Box(2) - Continuous 2D movement vectors [dx, dy] in range [-1, 1]
 - **Network**: 3-layer MLP [128, 256, 128] with tanh activation
 - **Episode Length**: 500 AI steps max (configurable in `Game.gd`)
 
@@ -117,6 +122,7 @@ To tune AI behavior, adjust these variables in `Game.gd` and restart training.
 ### Implemented
 ✅ Multi-policy training system with dynamic assignment
 ✅ Configurable reward shaping for behavior tuning
+✅ Continuous 2D action space for smooth movement control
 ✅ Movement efficiency rewards (direction consistency)
 ✅ Base defense penalties (team-wide)
 ✅ Random base placement per episode
@@ -124,13 +130,25 @@ To tune AI behavior, adjust these variables in `Game.gd` and restart training.
 ✅ Team-based combat with victory conditions
 ✅ Spawn side alternation for robust learning
 
+**Recent Changes:**
+- **Continuous Action Space**: Changed from Discrete(9) to Box(2) for smoother, more precise movement
+  - Benefits: Eliminates discrete jittering, enables nuanced positioning, natural for 2D environments
+  - Action format: [dx, dy] vectors in range [-1, 1] sent to Godot, which handles target calculation
+  - Direction change penalties now reward truly smooth trajectories instead of discrete angle changes
+- **Velocity-Based Observations**: Replaced absolute position with velocity in observation space
+  - Benefits: Position-invariant learning (fixes "always go left" problem), enables direction consistency learning
+  - AI can now see and learn from its own movement direction
+  - Velocity reflects actual achieved movement after collisions (from Godot's move_and_slide)
+  - Observation space changed from 92 to 94 dimensions (removed dist_to_center, added 2nd POI)
+
 ### Potential Improvements
-- **Replace absolute position with velocity in observations** ⚠️ IMPORTANT
-  - Current: Observations include absolute (x, y) position which leaks map side
-  - Problem: AI learns position-specific strategies ("go left" instead of "go to enemy")
-  - Solution: Replace with velocity (actual achieved movement, collision-aware)
-  - Benefit: Position-invariant learning, better generalization
-  - Implementation: `game/scripts/core/Game.gd:441` change `"pos"` to `"velocity"`
+- **CSV reward tracking per policy**
+  - Track detailed reward/penalty breakdown for each AI step
+  - CSV format: columns = reward types, rows = AI steps
+  - Separate CSV file per policy for comparison
+  - Columns: damage_to_unit, damage_to_base, unit_kills, base_kills, damage_received, death_penalty, team_outcome, positional, survival, movement_efficiency, base_damage_penalty, total
+  - Benefit: Analyze reward distributions, identify dominant components, tune reward balance
+  - Implementation: Add FileAccess in `Game.gd`, write per-step breakdown during reward calculation
 - Multi-worker configuration for faster training (requires reliable port assignment)
 - Curriculum learning with progressive difficulty
 - Hierarchical policies with squad-based coordination

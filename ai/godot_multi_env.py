@@ -12,16 +12,14 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
     Multi-agent RTS environment bridge between Godot game and Ray RLlib.
 
     Connects to a Godot game instance via TCP socket (JSON protocol) and manages
-    up to 100 RTS units as individual RL agents across 3 policies:
-    - policy_LT50: 49 trainable units (u1-u49)
-    - policy_GT50: 26 frozen baseline units (u50-u75)
-    - policy_frontline: 25 trainable units (u76-u100)
+    up to 100 RTS units as individual RL agents across multiple policies.
 
     Features:
     - Dynamic policy assignment: Units send policy_id in observations
-    - 91-dimensional observations: position, HP, battle stats, nearby units, POIs
-    - 9 discrete actions: 8 directional movements + stay
+    - 94-dimensional observations: velocity, HP, battle stats, nearby units, POIs
+    - Continuous 2D action space: [dx, dy] movement vectors in range [-1, 1]
     - Episode management: Automatic reset after max steps or victory/defeat
+    - Position-invariant learning: Velocity-based observations prevent position-specific strategies
     """
 
     def __init__(self, env_config: Dict[str, Any]):
@@ -49,17 +47,18 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         self.episode_step = 0
         self.episode_ended = False
 
-        # Observation space: 91-dimensional vector (89 + 2 for 1 POI)
-        # - Base (4): norm_x, norm_y, hp_ratio, dist_to_center
+        # Observation space: 94-dimensional vector
+        # - Base (3): vel_x, vel_y, hp_ratio (velocity replaces position for position-invariant learning)
         # - Battle stats (5): attack_range, attack_damage, attack_cooldown, cooldown_remaining, speed
         # - Closest allies (40): 10 units × (direction_x, direction_y, distance, hp_ratio)
         # - Closest enemies (40): 10 units × (direction_x, direction_y, distance, hp_ratio)
-        # - Points of interest (2): 1 POI × (direction_x, direction_y, distance) - currently map center
-        self.observation_space = Box(low=-1.0, high=10.0, shape=(92,), dtype=np.float32)
+        # - Points of interest (6): 2 POIs × (direction_x, direction_y, distance)
+        self.observation_space = Box(low=-1.0, high=10.0, shape=(94,), dtype=np.float32)
 
-        # Action space: 9 discrete actions
-        # 0: stay, 1-3: up-left/up/up-right, 4-6: left/stay/right, 7-9: down-left/down/down-right
-        self.action_space = Discrete(9)
+        # Action space: Continuous 2D movement vector
+        # Actions are [dx, dy] in range [-1, 1] representing movement direction and magnitude
+        # The vector is normalized and scaled by unit speed in Godot
+        self.action_space = Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
 
         # Multi-agent spaces - initialize with possible agents
         self.observation_spaces = {}
@@ -206,8 +205,15 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         """
         Convert Godot observation message to RLlib format.
 
-        Transforms raw Godot unit data into normalized 89-dimensional observation vectors
+        Transforms raw Godot unit data into normalized 94-dimensional observation vectors
         and extracts policy assignments for dynamic multi-policy support.
+
+        Observation structure (94 dimensions):
+        - Base (3): vel_x, vel_y, hp_ratio
+        - Battle stats (5): attack_range, attack_damage, attack_cooldown, cooldown_remaining, speed
+        - Closest allies (40): 10 × (direction_x, direction_y, distance, hp_ratio)
+        - Closest enemies (40): 10 × (direction_x, direction_y, distance, hp_ratio)
+        - Points of interest (6): 2 POIs × (direction_x, direction_y, distance)
 
         Args:
             godot_obs: Raw observation from Godot containing units list and map info
@@ -244,19 +250,16 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             self.agent_to_policy[agent_id] = policy_id
 
             # Convert unit data to normalized observation vector
-            pos = unit.get("pos", [0, 0])
+            velocity = unit.get("velocity", [0.0, 0.0])
             hp_ratio = unit.get("hp", 1) / max(unit.get("max_hp", 1), 1)
 
-            # Normalize position to [0, 1]
-            norm_x = pos[0] / map_info["w"] if map_info["w"] > 0 else 0.5
-            norm_y = pos[1] / map_info["h"] if map_info["h"] > 0 else 0.5
+            # Normalize velocity by max expected speed (around 100 pixels/second)
+            max_speed = 100.0
+            norm_vel_x = velocity[0] / max_speed
+            norm_vel_y = velocity[1] / max_speed
 
-            # Distance to center (normalized)
-            center_x, center_y = 0.5, 0.5
-            dist_to_center = np.sqrt((norm_x - center_x)**2 + (norm_y - center_y)**2)
-
-            # Build observation vector: base info + battle stats + closest allies + closest enemies
-            obs_vector = [norm_x, norm_y, hp_ratio, dist_to_center]
+            # Build observation vector: velocity + hp + battle stats + closest allies + closest enemies + POIs
+            obs_vector = [norm_vel_x, norm_vel_y, hp_ratio]
 
             # Add battle stats (normalized)
             attack_range = unit.get("attack_range", 64.0)
@@ -303,8 +306,8 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             # Process points of interest (POIs) - e.g., map center, control points
             pois = unit.get("points_of_interest", [])
 
-            # Ensure we have exactly 1 POI (pad or truncate as needed)
-            expected_poi_count = 1
+            # Ensure we have exactly 2 POIs (enemy base and own base)
+            expected_poi_count = 2
             for i in range(expected_poi_count):
                 if i < len(pois):
                     poi_data = pois[i]
@@ -320,14 +323,14 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                     obs_vector.extend([0.0, 0.0, 0.0])
 
             # Validate observation size
-            expected_size = 92
+            expected_size = 94
             if len(obs_vector) != expected_size:
                 raise ValueError(f"Agent {agent_id} observation size mismatch: got {len(obs_vector)}, expected {expected_size}")
 
             observations[agent_id] = np.array(obs_vector, dtype=np.float32)
 
             infos[agent_id] = {
-                "raw_pos": pos,
+                "velocity": velocity,
                 "hp": unit.get("hp", 1),
                 "max_hp": unit.get("max_hp", 1),
                 "episode_step": self.episode_step,
@@ -341,19 +344,19 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         # Handle dead agents - provide final observation for agents that disappeared
         dead_agents = self.agents - current_agents
         for dead_agent in dead_agents:
-            # Give dead agent a zero observation (92 values total - indicating death)
-            # Structure: 4 (base) + 5 (battle stats) + 40 (allies) + 40 (enemies) + 3 (POIs) = 92
-            dead_obs = [0.0, 0.0, 0.0, 1.0]  # Base observation indicating death
-            # Add 5 zeros for battle stats + 80 zeros for closest allies and enemies (10*4 + 10*4) + 3 for POIs
-            dead_obs.extend([0.0] * 88)  # 88 = 5 + 40 + 40 + 3
+            # Give dead agent a zero observation (94 values total - indicating death)
+            # Structure: 3 (base: vel_x, vel_y, hp) + 5 (battle) + 40 (allies) + 40 (enemies) + 6 (2 POIs) = 94
+            dead_obs = [0.0, 0.0, 0.0]  # Base: zero velocity, zero hp
+            # Add zeros for: 5 (battle stats) + 40 (allies) + 40 (enemies) + 6 (POIs) = 91
+            dead_obs.extend([0.0] * 91)
 
             # Validate dead observation size
-            if len(dead_obs) != 92:
-                raise ValueError(f"Dead agent {dead_agent} observation size mismatch: got {len(dead_obs)}, expected 92")
+            if len(dead_obs) != 94:
+                raise ValueError(f"Dead agent {dead_agent} observation size mismatch: got {len(dead_obs)}, expected 94")
 
             observations[dead_agent] = np.array(dead_obs, dtype=np.float32)
             infos[dead_agent] = {
-                "raw_pos": [0, 0],
+                "velocity": [0.0, 0.0],
                 "hp": 0,
                 "max_hp": 100,
                 "episode_step": self.episode_step,
@@ -389,16 +392,11 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         observations, infos = self._extract_obs_and_agents(godot_obs)
         self.last_obs = observations
 
-        # Store map info for action conversion
-        if "map" not in godot_obs:
-            raise ValueError("Map dimensions not provided by Godot in observation")
-        self.map_info = godot_obs["map"]
-
         print(f"Reset complete. Agents: {list(self.agents)}")
         return observations, infos
 
-    def step(self, actions: Dict[str, int]) -> Tuple[Dict[str, np.ndarray], Dict[str, float], Dict[str, bool], Dict[str, bool], Dict[str, Dict]]:
-        """Step the environment"""
+    def step(self, actions: Dict[str, np.ndarray]) -> Tuple[Dict[str, np.ndarray], Dict[str, float], Dict[str, bool], Dict[str, bool], Dict[str, Dict]]:
+        """Step the environment with continuous actions"""
         if not self.connected:
             print("Connection lost, attempting to reconnect...")
             if not self._connect():
@@ -407,50 +405,28 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         # Track episode steps
         self.episode_step += 1
 
-        # Convert actions to Godot format
+        # Convert continuous actions to Godot format
         godot_actions = {}
         for agent_id, action in actions.items():
             if agent_id not in self.agents:
                 continue
 
-            # Convert discrete action to move command
-            if isinstance(action, (np.integer, int)):
-                action = int(action)
+            # Ensure action is a numpy array with 2 elements [dx, dy]
+            if isinstance(action, np.ndarray):
+                action_array = action.flatten()
             else:
-                action = 0  # Default action
+                action_array = np.array([0.0, 0.0])
 
-            stepsize = 60
-            # Map action to movement
-            moves = [
-                [0, 0],    # 0: no move
-                [-stepsize, -stepsize], [0, -stepsize], [stepsize, -stepsize],  # 1,2,3: up-left, up, up-right
-                [-stepsize, 0],   [0, 0],   [stepsize, 0],    # 4,5,6: left, stay, right
-                [-stepsize, stepsize],  [0, stepsize],  [stepsize, stepsize]    # 7,8,9: down-left, down, down-right
-            ]
+            if len(action_array) < 2:
+                action_array = np.array([0.0, 0.0])
 
-            if 0 <= action < len(moves):
-                # Get current position and add movement
-                current_pos = self.last_obs.get(agent_id, np.array([0.5, 0.5, 1.0, 0.0]))
-                # Convert normalized back to world coordinates using actual map size
-                if not hasattr(self, 'map_info'):
-                    raise ValueError("Map info not initialized - missing map dimensions from Godot")
-                map_w = self.map_info["w"]
-                map_h = self.map_info["h"]
+            # Extract movement vector (range [-1, 1])
+            dx = float(action_array[0])
+            dy = float(action_array[1])
 
-                world_x = current_pos[0] * map_w
-                world_y = current_pos[1] * map_h
-
-                new_x = max(0, min(map_w, world_x + moves[action][0]))
-                new_y = max(0, min(map_h, world_y + moves[action][1]))
-
-                godot_actions[agent_id] = {"move": [new_x, new_y]}
-            else:
-                # Default to center using actual map size
-                if not hasattr(self, 'map_info'):
-                    raise ValueError("Map info not initialized - missing map dimensions from Godot")
-                map_w = self.map_info["w"]
-                map_h = self.map_info["h"]
-                godot_actions[agent_id] = {"move": [map_w/2, map_h/2]}
+            # Send the raw movement vector to Godot
+            # Godot will handle scaling and calculating absolute target position
+            godot_actions[agent_id] = {"move_vector": [dx, dy]}
 
         # Send actions with retry logic
         if not self._send_message({"type": "act", "actions": godot_actions}):
@@ -470,11 +446,6 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
 
         observations, infos = self._extract_obs_and_agents(godot_obs)
         self.last_obs = observations
-
-        # Update map info for next action conversion
-        if "map" not in godot_obs:
-            raise ValueError("Map dimensions not provided by Godot in observation")
-        self.map_info = godot_obs["map"]
 
         # Wait for reward message
         reward_msg = None
@@ -518,7 +489,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                 rewards[agent_id] = reward
 
                 # Optional: Log significant combat rewards for debugging
-                if abs(reward) > 1.0:  # Log rewards above normal positional range
+                if abs(reward) > 3.0:  # Log rewards above normal positional range
                     print(f"Agent {agent_id} received significant reward: {reward:.2f}")
 
                 # Mark dead agents as terminated (not truncated)
