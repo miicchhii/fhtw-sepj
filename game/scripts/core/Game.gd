@@ -12,19 +12,19 @@ class_name Game
 # Physics and timing
 var tick: int = 0               # Physics tick counter (60 ticks per second)
 var ai_step: int = 0            # AI step counter (independent of physics ticks)
-var ai_tick_interval: int = 15  # Run AI logic every 15 physics ticks (~4 AI steps/second)
+var ai_tick_interval: int = GameConfig.AI_TICK_INTERVAL
 
-# Map dimensions
-var map_w: int = 1280*2  # Map width in pixels
-var map_h: int = 720*2   # Map height in pixels
+# Map dimensions (from GameConfig)
+var map_w: int = GameConfig.MAP_WIDTH
+var map_h: int = GameConfig.MAP_HEIGHT
 
 # Episode management
 var episode_ended: bool = false  # True when episode terminates
-var max_episode_steps: int = 500  # Maximum AI steps per episode
+var max_episode_steps: int = GameConfig.MAX_EPISODE_STEPS
 
 # Unit configuration
-var num_ally_units_start = 50   # Number of ally units to spawn
-var num_enemy_units_start = 50  # Number of enemy units to spawn
+var num_ally_units_start: int = GameConfig.NUM_ALLY_UNITS
+var num_enemy_units_start: int = GameConfig.NUM_ENEMY_UNITS
 
 # AI control toggle (N key = AI, M key = manual)
 var ai_controls_allies: bool = true  # Whether AI controls ally units
@@ -43,35 +43,35 @@ var base_scene = preload("res://scenes/buildings/base.tscn")
 var ally_base: Node = null
 var enemy_base: Node = null
 
-# Reward configuration - adjust these to tune AI behavior
+# Reward configuration - initialized from GameConfig, can be tuned at runtime
 # Combat rewards
-var reward_damage_to_unit: float = 0.2       # Reward per damage point to enemy units
-var reward_damage_to_base: float = 1.0       # Reward per damage point to enemy base
-var reward_unit_kill: float = 15.0           # Reward for killing an enemy unit
-var reward_base_kill: float = 200.0          # Reward for destroying enemy base
-var penalty_damage_received: float = 0.1     # Penalty per damage point received
-var penalty_death: float = 5.0               # Penalty for dying
+var reward_damage_to_unit: float = GameConfig.REWARD_DAMAGE_TO_UNIT
+var reward_damage_to_base: float = GameConfig.REWARD_DAMAGE_TO_BASE
+var reward_unit_kill: float = GameConfig.REWARD_UNIT_KILL
+var reward_base_kill: float = GameConfig.REWARD_BASE_KILL
+var penalty_damage_received: float = GameConfig.PENALTY_DAMAGE_RECEIVED
+var penalty_death: float = GameConfig.PENALTY_DEATH
 
 # Team outcome rewards
-var reward_team_victory: float = 50.0        # Bonus when your team wins
-var penalty_team_defeat: float = 25.0        # Penalty when your team loses
+var reward_team_victory: float = GameConfig.REWARD_TEAM_VICTORY
+var penalty_team_defeat: float = GameConfig.PENALTY_TEAM_DEFEAT
 
 # Positional rewards
-var reward_position_multiplier: float = 1.5  # Multiplier for proximity to enemy base (0.5 at base, 0.0 at far edge)
+var reward_position_multiplier: float = GameConfig.REWARD_POSITION_MULTIPLIER
 
 # Survival reward
-var reward_alive_per_step: float = 0.01      # Small reward for staying alive each step
+var reward_alive_per_step: float = GameConfig.REWARD_ALIVE_PER_STEP
 
 # Movement efficiency rewards
-var reward_continue_straight: float = 0.5    # Reward for maintaining direction (0° angle)
-var penalty_reverse_direction: float = 1   # Penalty for reversing direction (180° angle)
+var reward_continue_straight: float = GameConfig.REWARD_CONTINUE_STRAIGHT
+var penalty_reverse_direction: float = GameConfig.PENALTY_REVERSE_DIRECTION
 
 # Base damage penalty (applied to entire team when their base takes damage)
-var penalty_base_damage_per_unit: float = 0.5  # Penalty per damage point to your base, divided among all units
+var penalty_base_damage_per_unit: float = GameConfig.PENALTY_BASE_DAMAGE_PER_UNIT
 
 # Tactical spacing (anti-clustering)
-var reward_tactical_spacing: float = 0.1       # Penalty per nearby ally within threshold
-var tactical_spacing_threshold: float = 100.0  # Minimum desired ally spacing (pixels)
+var reward_tactical_spacing: float = GameConfig.REWARD_TACTICAL_SPACING
+var tactical_spacing_threshold: float = GameConfig.TACTICAL_SPACING_THRESHOLD
 
 func _ready() -> void:
 	spawn_bases()
@@ -96,12 +96,12 @@ func spawn_bases():
 	var rng = RandomNumberGenerator.new()
 	rng.randomize()
 
-	# Define safe margins from map edges (pixels)
-	var margin_x = 150  # Horizontal margin
-	var margin_y = 150  # Vertical margin
+	# Define safe margins from map edges (from GameConfig)
+	var margin_x = GameConfig.BASE_SPAWN_MARGIN_X
+	var margin_y = GameConfig.BASE_SPAWN_MARGIN_Y
 
 	# Calculate team halves
-	var half_map_x = map_w / 2.0
+	var half_map_x = GameConfig.get_half_map_width()
 
 	# Determine which half each team spawns in
 	var ally_x_min: float
@@ -157,19 +157,19 @@ func spawn_all_units():
 	- 50 ally units: 1/3 snipers (long range), 2/3 infantry (balanced)
 	- 50 enemy units: 1/3 snipers (long range), 2/3 infantry (balanced)
 
-	Units are spawned in a 5-column grid formation with 60-pixel spacing.
+	Units are spawned in a grid formation (from GameConfig).
 	"""
-	
-	var spawnbox_start_x_1 = 50
-	var spawnbox_start_y_1 = 100
 
-	var spawnbox_start_x_2 = map_w/2
-	var spawnbox_start_y_2 = 100
+	var spawnbox_start_x_1 = GameConfig.UNIT_SPAWNBOX_X_LEFT
+	var spawnbox_start_y_1 = GameConfig.UNIT_SPAWNBOX_Y
 
-	var spawn_spacing_x = 250/1
-	var spawn_spacing_y = 133/1
+	var spawnbox_start_x_2 = GameConfig.UNIT_SPAWNBOX_X_RIGHT
+	var spawnbox_start_y_2 = GameConfig.UNIT_SPAWNBOX_Y
 
-	var spawn_rows = 5
+	var spawn_spacing_x = GameConfig.UNIT_SPAWN_SPACING_X
+	var spawn_spacing_y = GameConfig.UNIT_SPAWN_SPACING_Y
+
+	var spawn_rows = GameConfig.UNIT_SPAWN_COLUMNS
 
 	# Determine spawn positions based on swap_spawn_sides
 	var ally_x = spawnbox_start_x_1 if not swap_spawn_sides else spawnbox_start_x_2
@@ -184,16 +184,16 @@ func spawn_all_units():
 	print("Creating ally units...")
 	for i in range(num_ally_units_start):
 		var pos = Vector2(ally_x + (i % spawn_rows) * spawn_spacing_x, ally_y + (i / spawn_rows) * spawn_spacing_y)
-		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
-		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
+		# Spawn snipers based on GameConfig interval
+		var unit_type = Global.UnitType.SNIPER if i % GameConfig.SNIPER_SPAWN_INTERVAL == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, false, unit_type)
 
 	# Create enemy units with sequential IDs (mix of infantry and snipers)
 	print("Creating enemy units...")
 	for i in range(num_enemy_units_start):
 		var pos = Vector2(enemy_x + (i % spawn_rows) * spawn_spacing_x, enemy_y + (i / spawn_rows) * spawn_spacing_y)
-		# Spawn snipers for every 3rd unit (roughly 1/3 snipers, 2/3 infantry)
-		var unit_type = Global.UnitType.SNIPER if i % 3 == 0 else Global.UnitType.INFANTRY
+		# Spawn snipers based on GameConfig interval
+		var unit_type = Global.UnitType.SNIPER if i % GameConfig.SNIPER_SPAWN_INTERVAL == 0 else Global.UnitType.INFANTRY
 		Global.spawnUnit(pos, true, unit_type)
 
 func init_units():
@@ -246,7 +246,7 @@ func _physics_process(_delta: float) -> void:
 			#print("Game: Sending observation for AI step ", ai_step)
 			AiServer.send_observation(obs)
 
-			var center := Vector2(map_w * 0.5, map_h * 0.5)
+			var center := GameConfig.get_map_center()
 			var rewards := {}
 			var dones := {}
 
@@ -649,8 +649,8 @@ func _apply_actions(actions: Dictionary) -> void:
 				var action_vector = Vector2(dx, dy)
 				var action_magnitude = action_vector.length()
 
-				# Maximum movement distance per AI step
-				var stepsize: float = 200.0
+				# Maximum movement distance per AI step (from GameConfig)
+				var stepsize: float = GameConfig.AI_ACTION_STEPSIZE
 
 				# Calculate movement offset
 				var move_offset: Vector2
