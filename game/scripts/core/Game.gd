@@ -69,6 +69,10 @@ var penalty_reverse_direction: float = 1   # Penalty for reversing direction (18
 # Base damage penalty (applied to entire team when their base takes damage)
 var penalty_base_damage_per_unit: float = 0.5  # Penalty per damage point to your base, divided among all units
 
+# Tactical spacing (anti-clustering)
+var reward_tactical_spacing: float = 0.1       # Penalty per nearby ally within threshold
+var tactical_spacing_threshold: float = 100.0  # Minimum desired ally spacing (pixels)
+
 func _ready() -> void:
 	spawn_bases()
 	init_units()
@@ -332,6 +336,33 @@ func _physics_process(_delta: float) -> void:
 					reward -= ally_base_damage_penalty
 				else:
 					reward -= enemy_base_damage_penalty
+
+				# Tactical spacing: Penalize for each ally too close (stacking penalty)
+				var spacing_penalty: float = 0.0
+				var nearby_ally_count: int = 0
+
+				for other_unit in get_tree().get_nodes_in_group("units"):
+					if other_unit == u:
+						continue  # Skip self
+
+					# Check if same faction
+					if other_unit.is_enemy != u.is_enemy:
+						continue  # Only care about allies
+
+					var distance = u.global_position.distance_to(other_unit.global_position)
+
+					if distance < tactical_spacing_threshold:
+						# Calculate penalty based on how close they are
+						# Closer = bigger penalty
+						var proximity_ratio = 1.0 - (distance / tactical_spacing_threshold)
+						spacing_penalty += reward_tactical_spacing * proximity_ratio
+						nearby_ally_count += 1
+
+				reward -= spacing_penalty
+
+				# Optional: Debug log for tuning (comment out after testing)
+				# if nearby_ally_count > 3:
+				# 	print("Unit ", u.unit_id, " has ", nearby_ally_count, " allies too close, penalty: ", spacing_penalty)
 
 				rewards[u.unit_id] = reward
 				dones[u.unit_id] = should_end_episode

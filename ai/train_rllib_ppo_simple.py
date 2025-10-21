@@ -174,7 +174,7 @@ if __name__ == "__main__":
             vf_clip_param=10.0,     # Value function clip parameter
             use_gae=True,           # Use Generalized Advantage Estimation
             lambda_=0.9,            # GAE lambda parameter (bias-variance tradeoff)
-            entropy_coeff=0.1,    # Entropy bonus for exploration (increased for more randomness)
+            entropy_coeff=0.01,    # Entropy bonus for exploration (REDUCED from 0.1 for Box(2) action space - prevents action noise)
         )
         .rl_module(
             model_config={

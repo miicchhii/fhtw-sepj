@@ -64,6 +64,11 @@ This project implements a multi-agent reinforcement learning system where AI age
   - Closest enemies (40): 10 × (direction_x, direction_y, distance, hp_ratio)
   - Points of interest (6): 2 POIs × (direction_x, direction_y, distance) - enemy base and own base
 - **Action Space**: Box(2) - Continuous 2D movement vectors [dx, dy] in range [-1, 1]
+  - Direction: Normalized vector (e.g., [1,1] → 45° northeast)
+  - Magnitude: Fraction of full step (200px max). Examples:
+    - [1.0, 1.0] → full step northeast (200px)
+    - [0.0, 1.0] → full step north (200px)
+    - [0.5, 0.0] → half step east (100px)
 - **Network**: 3-layer MLP [128, 256, 128] with tanh activation
 - **Episode Length**: 500 AI steps max (configurable in `Game.gd`)
 
@@ -93,12 +98,17 @@ All rewards and penalties are configurable in `game/scripts/core/Game.gd` (lines
 - Proximity to enemy base: 0.0 to +0.5 (multiplier: 1.5)
 
 **Movement Efficiency:**
-- Continue straight (0°): +0.1
-- Reverse direction (180°): -0.2
+- Continue straight (0°): +0.5
+- Reverse direction (180°): -1.0
 - Scales linearly with angle
 
+**Tactical Spacing (Anti-Clustering):**
+- Penalty per ally within 100px: -0.1 × proximity ratio
+- Stacking: Multiple close allies = multiple penalties
+- Example: 3 allies at 50px = 3 × 0.1 × 0.5 = -0.15 penalty
+
 **Base Defense:**
-- Base damage penalty: -0.05 per damage point to your team's base (shared by all units)
+- Base damage penalty: -0.5 per damage point to your team's base (shared by all units)
 
 **Survival:**
 - Alive per step: +0.01
@@ -135,11 +145,21 @@ To tune AI behavior, adjust these variables in `Game.gd` and restart training.
   - Benefits: Eliminates discrete jittering, enables nuanced positioning, natural for 2D environments
   - Action format: [dx, dy] vectors in range [-1, 1] sent to Godot, which handles target calculation
   - Direction change penalties now reward truly smooth trajectories instead of discrete angle changes
+- **Magnitude-Normalized Actions**: Actions now use normalized direction + magnitude fraction
+  - Ensures equal movement distance in all directions (diagonal no longer 41% longer)
+  - [1,1] and [0,1] both result in 200px movement (full step)
+  - Magnitude controls speed: [0.5, 0] = half step, [1.0, 1.0] = full step
+  - See `ACTION_MAGNITUDE_SPEC.md` for detailed behavior
 - **Velocity-Based Observations**: Replaced absolute position with velocity in observation space
   - Benefits: Position-invariant learning (fixes "always go left" problem), enables direction consistency learning
   - AI can now see and learn from its own movement direction
   - Velocity reflects actual achieved movement after collisions (from Godot's move_and_slide)
   - Observation space changed from 92 to 94 dimensions (removed dist_to_center, added 2nd POI)
+- **Tactical Spacing Reward**: Added stacking penalties to discourage clustering
+  - Units penalized for each ally within 100px threshold
+  - Penalty scales with proximity (closer = higher penalty)
+  - Encourages spread formations instead of clumping in corners
+  - Configurable threshold and penalty strength in `Game.gd:73-74`
 
 ### Potential Improvements
 - **CSV reward tracking per policy**
