@@ -46,6 +46,7 @@ var enemy_base: Node = null
 # Core components (initialized in _ready)
 var reward_calculator: RewardCalculator = null
 var observation_builder: ObservationBuilder = null
+var action_handler: ActionHandler = null
 
 # Reward configuration - initialized from GameConfig, can be tuned at runtime
 # Combat rewards
@@ -99,6 +100,14 @@ func _ready() -> void:
 
 	# Initialize observation builder
 	observation_builder = ObservationBuilder.new(map_w, map_h)
+
+	# Initialize action handler
+	action_handler = ActionHandler.new(
+		reward_continue_straight,
+		penalty_reverse_direction,
+		map_w,
+		map_h
+	)
 
 	spawn_bases()
 	init_units()
@@ -263,12 +272,14 @@ func _physics_process(_delta: float) -> void:
 			ai_step += 1  # Increment AI step counter only when we get actions
 			#print("Game: Processing AI step ", ai_step, " at tick ", tick, " with ", action_batches.size(), " action batches")
 
-			# Apply actions (from AiServer)
+			# Get all units once for reuse
+			var all_units = get_tree().get_nodes_in_group("units")
+
+			# Apply actions using ActionHandler
 			for actions: Dictionary in action_batches:
-				_apply_actions(actions)
+				action_handler.apply_actions(actions, all_units, ai_controls_allies)
 
 			# Build and send observations using ObservationBuilder
-			var all_units = get_tree().get_nodes_in_group("units")
 			var obs = observation_builder.build_observation(
 				ai_step,
 				tick,
@@ -329,112 +340,6 @@ func _physics_process(_delta: float) -> void:
 				episode_ended = true
 				print("Episode ended at ai_step ", ai_step, " (physics_tick ", tick, ") - waiting for Python reset...")
 				# Don't auto-reset here - let Python handle the reset via _ai_request_reset()
-
-func _apply_actions(actions: Dictionary) -> void:
-	"""
-	Apply movement actions from Python AI to Godot units.
-
-	Receives actions from godot_multi_env.py using continuous 2D action space.
-	Actions are [dx, dy] vectors in range [-1, 1] where:
-	- Direction: Normalized vector direction (e.g., [1,1] → 45° northeast)
-	- Magnitude: Fraction of full step to take (e.g., |[1,1]| = 1.41 → clamped to 1.0 = full step)
-
-	Examples:
-	- [1.0, 1.0]: Full step (200px) at 45° northeast
-	- [0.0, 1.0]: Full step (200px) straight north
-	- [0.5, 0.5]: 71% step (141px) at 45° northeast
-	- [0.5, 0.0]: Half step (100px) straight east
-
-	Action format from Python:
-	{
-		"u1": {"move_vector": [dx, dy]},
-		"u2": {"move_vector": [dx, dy]},
-		...
-	}
-
-	The AI control toggle (N/M keys) allows switching between AI and manual control
-	for ally units. Enemy units are always AI-controlled.
-
-	Args:
-		actions: Dictionary mapping unit IDs to action dictionaries with move_vector
-	"""
-	# actions expected shape: { "u1": {"move_vector":[dx, dy]}, ... }
-	for id_var in actions.keys():
-		var id: String = String(id_var)
-
-		var u: RTSUnit = _get_unit(id)
-		if u == null:
-			continue
-
-		# Only apply AI actions to ally units if AI control is enabled
-		# Enemy units are always AI controlled
-		if not u.is_enemy and not ai_controls_allies:
-			continue  # Skip AI actions for ally units when in manual control mode
-
-		var a := actions[id] as Dictionary
-		if a.has("move_vector"):
-			var vec := a["move_vector"] as Array
-			if vec.size() >= 2:
-				var dx: float = float(vec[0])
-				var dy: float = float(vec[1])
-
-				# Interpret action as: direction (normalized) + magnitude (fraction of full step)
-				var action_vector = Vector2(dx, dy)
-				var action_magnitude = action_vector.length()
-
-				# Maximum movement distance per AI step (from GameConfig)
-				var stepsize: float = GameConfig.AI_ACTION_STEPSIZE
-
-				# Calculate movement offset
-				var move_offset: Vector2
-				if action_magnitude > 0.01:  # Avoid division by zero
-					# Normalize direction, then scale by magnitude fraction (clamped to 1.0)
-					var direction = action_vector.normalized()
-					var step_fraction = min(action_magnitude, 1.0)  # Clamp to max 1.0
-					move_offset = direction * (step_fraction * stepsize)
-				else:
-					# Zero or near-zero action = no movement
-					move_offset = Vector2.ZERO
-
-				# Calculate new target position from current position
-				var new_target = u.global_position + move_offset
-
-				# Clamp to map boundaries
-				new_target.x = clamp(new_target.x, 0, map_w)
-				new_target.y = clamp(new_target.y, 0, map_h)
-
-				# Calculate direction change reward/penalty
-				var new_direction = (new_target - u.global_position).normalized()
-
-				# Only calculate if we have a previous direction and both directions are non-zero
-				if u.previous_move_direction.length_squared() > 0.01 and new_direction.length_squared() > 0.01:
-					# Calculate dot product to get cosine of angle
-					var dot = u.previous_move_direction.dot(new_direction)
-					dot = clamp(dot, -1.0, 1.0)  # Clamp for numerical stability
-
-					# Convert to angle in degrees
-					var angle_rad = acos(dot)
-					var angle_deg = rad_to_deg(angle_rad)
-
-					# Linear interpolation using configurable values
-					# reward_continue_straight at 0° to -penalty_reverse_direction at 180°
-					var reward_range = reward_continue_straight + penalty_reverse_direction
-					u.direction_change_reward = reward_continue_straight - (angle_deg / 180.0) * reward_range
-				else:
-					# No penalty for first move or stationary units
-					u.direction_change_reward = 0.0
-
-				# Store current direction for next comparison
-				if new_direction.length_squared() > 0.01:
-					u.previous_move_direction = new_direction
-
-				u.set_move_target(new_target)
-
-func _get_unit(id: String) -> RTSUnit:
-	for u: RTSUnit in get_tree().get_nodes_in_group("units"):
-		if u.unit_id == id:
-			return u
-	return null
 
 func _ai_request_reset() -> void:
 	"""
