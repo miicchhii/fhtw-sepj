@@ -18,21 +18,12 @@ var ai_tick_interval: int = GameConfig.AI_TICK_INTERVAL
 var map_w: int = GameConfig.MAP_WIDTH
 var map_h: int = GameConfig.MAP_HEIGHT
 
-# Episode management
-var episode_ended: bool = false  # True when episode terminates
-var max_episode_steps: int = GameConfig.MAX_EPISODE_STEPS
-
 # Unit configuration
 var num_ally_units_start: int = GameConfig.NUM_ALLY_UNITS
 var num_enemy_units_start: int = GameConfig.NUM_ENEMY_UNITS
 
 # AI control toggle (N key = AI, M key = manual)
 var ai_controls_allies: bool = true  # Whether AI controls ally units
-
-# Spawn side alternation for position-invariant learning
-# Prevents AI from learning position-specific strategies
-var episode_count: int = 0          # Total episodes completed
-var swap_spawn_sides: bool = false  # True to swap ally/enemy spawn sides
 
 var units = []
 var unit_scene = preload("res://scenes/units/infantry.tscn")
@@ -48,6 +39,7 @@ var reward_calculator: RewardCalculator = null
 var observation_builder: ObservationBuilder = null
 var action_handler: ActionHandler = null
 var spawn_manager: SpawnManager = null
+var episode_manager: EpisodeManager = null
 
 # Reward configuration - initialized from GameConfig, can be tuned at runtime
 # Combat rewards
@@ -120,8 +112,11 @@ func _ready() -> void:
 		self  # Parent node for spawned entities
 	)
 
+	# Initialize episode manager
+	episode_manager = EpisodeManager.new(GameConfig.MAX_EPISODE_STEPS)
+
 	# Spawn bases and units
-	var bases = spawn_manager.spawn_bases(swap_spawn_sides)
+	var bases = spawn_manager.spawn_bases(episode_manager.get_spawn_sides_swapped())
 	ally_base = bases["ally_base"]
 	enemy_base = bases["enemy_base"]
 
@@ -145,7 +140,7 @@ func init_units():
 		print("Game: Created new Units container")
 
 	# Spawn all units using spawn manager
-	spawn_manager.spawn_all_units(swap_spawn_sides)
+	spawn_manager.spawn_all_units(episode_manager.get_spawn_sides_swapped())
 	print("Game: init_units() completed")
 
 func get_units():
@@ -205,8 +200,8 @@ func _physics_process(_delta: float) -> void:
 			var game_won = (enemies_alive == 0 and allies_alive > 0) or enemy_base_destroyed
 			var game_lost = (allies_alive == 0 and enemies_alive > 0) or ally_base_destroyed
 
-			# Check for episode end condition
-			var should_end_episode = (ai_step >= max_episode_steps) or game_won or game_lost
+			# Check for episode end condition using EpisodeManager
+			var should_end_episode = episode_manager.should_end_episode(ai_step, game_won, game_lost)
 
 			# Calculate rewards using RewardCalculator
 			var all_units = get_tree().get_nodes_in_group("units")
@@ -239,8 +234,8 @@ func _physics_process(_delta: float) -> void:
 			await get_tree().process_frame
 
 			# IMPORTANT: Only reset AFTER sending the done signal
-			if should_end_episode and not episode_ended:
-				episode_ended = true
+			if should_end_episode and not episode_manager.is_episode_ended():
+				episode_manager.mark_episode_ended()
 				print("Episode ended at ai_step ", ai_step, " (physics_tick ", tick, ") - waiting for Python reset...")
 				# Don't auto-reset here - let Python handle the reset via _ai_request_reset()
 
@@ -249,16 +244,13 @@ func _ai_request_reset() -> void:
 	Reset the game episode when called by Python training system.
 
 	This function is called by AiServer when Python sends a reset request after
-	an episode terminates. It handles:
-	- Clearing all units and resetting counters
-	- Alternating spawn sides for position-invariant learning
-	- Respawning all units with fresh IDs
-	- Sending initial observation to Python
+	an episode terminates. Delegates to EpisodeManager for full reset orchestration.
 
 	Episode termination conditions:
-	- ai_step >= max_episode_steps (default 100)
+	- ai_step >= max_episode_steps (default 500)
 	- All allies dead (game lost)
 	- All enemies dead (game won)
+	- Base destroyed (immediate win/loss)
 
 	Spawn side alternation:
 	- Episode 0, 2, 4... (even): allies left, enemies right
@@ -267,55 +259,30 @@ func _ai_request_reset() -> void:
 	This prevents the AI from learning position-dependent strategies like
 	"always move right" instead of "move toward enemies".
 	"""
-	print("Game: Resetting episode...")
+	print("Game: Reset requested, delegating to EpisodeManager...")
 	tick = 0
 	ai_step = 0
-	episode_ended = false
 
-	# Increment episode count and alternate spawn sides
-	episode_count += 1
-	swap_spawn_sides = (episode_count % 2 == 1)  # Swap on odd episodes
+	# Delegate to episode manager for full reset
+	# Use arrays to pass base references (allows EpisodeManager to update them)
+	var ally_base_ref = [ally_base]
+	var enemy_base_ref = [enemy_base]
 
-	# Remove all existing bases
-	if ally_base and is_instance_valid(ally_base):
-		ally_base.queue_free()
-	if enemy_base and is_instance_valid(enemy_base):
-		enemy_base.queue_free()
+	await episode_manager.request_reset(
+		spawn_manager,
+		observation_builder,
+		self,  # game_node
+		ally_base_ref,
+		enemy_base_ref,
+		AiServer
+	)
 
-	# Remove all existing units
-	for u in get_tree().get_nodes_in_group("units"):
-		u.queue_free()
-
-	# Wait for units and bases to be removed
-	await get_tree().process_frame
-
-	# Reset unit ID counter to start fresh
-	Global.next_unit_id = 1
-
-	# Respawn bases and units using spawn manager
-	print("Game: Respawning bases and units (episode ", episode_count, ")...")
-	var bases = spawn_manager.spawn_bases(swap_spawn_sides)
-	ally_base = bases["ally_base"]
-	enemy_base = bases["enemy_base"]
-
-	spawn_manager.spawn_all_units(swap_spawn_sides)
+	# Update local references from EpisodeManager
+	ally_base = ally_base_ref[0]
+	enemy_base = enemy_base_ref[0]
 
 	# Refresh units array
 	get_units()
-
-	print("Game: Reset complete with ", num_ally_units_start, " ally units and ", num_enemy_units_start, " enemy units")
-
-	# Send initial observation immediately after reset using ObservationBuilder
-	var all_units = get_tree().get_nodes_in_group("units")
-	var obs = observation_builder.build_observation(
-		ai_step,
-		tick,
-		all_units,
-		ally_base,
-		enemy_base
-	)
-	print("Game: Sending initial observation with ", obs["units"].size(), " units")
-	AiServer.send_observation(obs)
 
 #new code - lukas
 
