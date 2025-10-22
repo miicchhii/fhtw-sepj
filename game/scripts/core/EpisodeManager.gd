@@ -102,8 +102,10 @@ func request_reset(
 	# Wait for units and bases to be removed
 	await game_node.get_tree().process_frame
 
-	# Reset unit ID counter to start fresh
-	Global.next_unit_id = 1
+	# NOTE: Do NOT reset Global.next_unit_id here!
+	# Unit IDs must be globally unique across all episodes to prevent
+	# Python/RLlib from getting confused about which units are which.
+	# Resetting causes "Agent u101 already had is_done=True" errors.
 
 	# Respawn bases and units using spawn manager
 	print("EpisodeManager: Respawning bases and units (episode ", episode_count, ")...")

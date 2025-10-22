@@ -160,6 +160,10 @@ func _physics_process(_delta: float) -> void:
 
 	# Only process AI logic every ai_tick_interval ticks
 	if tick % ai_tick_interval == 0:
+		# Skip if episode has already ended (waiting for Python reset)
+		if episode_manager.is_episode_ended():
+			return
+
 		# Only process AI logic when we have actions from Python
 		var action_batches = AiServer.pop_actions()
 		if action_batches.size() > 0:
@@ -173,17 +177,8 @@ func _physics_process(_delta: float) -> void:
 			for actions: Dictionary in action_batches:
 				action_handler.apply_actions(actions, all_units, player_controller.is_ai_controlling_allies())
 
-			# Build and send observations using ObservationBuilder
-			var obs = observation_builder.build_observation(
-				ai_step,
-				tick,
-				all_units,
-				ally_base,
-				enemy_base
-			)
-			AiServer.send_observation(obs)
-
-			# Check for victory/defeat conditions
+			# Check for victory/defeat conditions BEFORE building observation
+			# (bases may be destroyed during combat)
 			var ally_units = get_tree().get_nodes_in_group("ally")
 			var enemy_units = get_tree().get_nodes_in_group("enemy")
 			var allies_alive = ally_units.size()
@@ -193,17 +188,33 @@ func _physics_process(_delta: float) -> void:
 			var ally_base_destroyed = (ally_base == null or not is_instance_valid(ally_base))
 			var enemy_base_destroyed = (enemy_base == null or not is_instance_valid(enemy_base))
 
+			# Build and send observations using ObservationBuilder
+			# Pass null for destroyed bases to avoid "previously freed" error
+			var obs_ally_base = ally_base if not ally_base_destroyed else null
+			var obs_enemy_base = enemy_base if not enemy_base_destroyed else null
+			var obs = observation_builder.build_observation(
+				ai_step,
+				tick,
+				all_units,
+				obs_ally_base,
+				obs_enemy_base
+			)
+			AiServer.send_observation(obs)
+
 			var game_won = (enemies_alive == 0 and allies_alive > 0) or enemy_base_destroyed
 			var game_lost = (allies_alive == 0 and enemies_alive > 0) or ally_base_destroyed
 
 			# Check for episode end condition using EpisodeManager
 			var should_end_episode = episode_manager.should_end_episode(ai_step, game_won, game_lost)
 
-			# Calculate rewards using RewardCalculator (reuse all_units from line 170)
+			# Calculate rewards using RewardCalculator
+			# Pass null for destroyed bases to avoid "previously freed" error
+			var reward_ally_base = ally_base if not ally_base_destroyed else null
+			var reward_enemy_base = enemy_base if not enemy_base_destroyed else null
 			var rewards = reward_calculator.calculate_rewards(
 				all_units,
-				ally_base,
-				enemy_base,
+				reward_ally_base,
+				reward_enemy_base,
 				player_controller.is_ai_controlling_allies(),
 				game_won,
 				game_lost,
@@ -213,13 +224,14 @@ func _physics_process(_delta: float) -> void:
 			# Build dones dictionary
 			var dones := {}
 			for u in all_units:
-				dones[u.unit_id] = should_end_episode
+				if u != null and is_instance_valid(u):
+					dones[u.unit_id] = should_end_episode
 
 			# CRITICAL: Send rewards immediately after observation, don't wait
 			#print("Game: Sending rewards - should_end_episode: ", should_end_episode, " dones: ", dones)
 			AiServer.send_reward(0.0, should_end_episode, {"rewards": rewards, "dones": dones})
 
-			# Reset base damage tracking for next step
+			# Reset base damage tracking for next step (only if bases still exist)
 			if ally_base and is_instance_valid(ally_base):
 				ally_base.reset_damage_tracking()
 			if enemy_base and is_instance_valid(enemy_base):
