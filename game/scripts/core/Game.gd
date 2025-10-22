@@ -22,9 +22,6 @@ var map_h: int = GameConfig.MAP_HEIGHT
 var num_ally_units_start: int = GameConfig.NUM_ALLY_UNITS
 var num_enemy_units_start: int = GameConfig.NUM_ENEMY_UNITS
 
-# AI control toggle (N key = AI, M key = manual)
-var ai_controls_allies: bool = true  # Whether AI controls ally units
-
 var units = []
 var unit_scene = preload("res://scenes/units/infantry.tscn")
 var next_unit_id = 1
@@ -40,6 +37,7 @@ var observation_builder: ObservationBuilder = null
 var action_handler: ActionHandler = null
 var spawn_manager: SpawnManager = null
 var episode_manager: EpisodeManager = null
+var player_controller: PlayerController = null
 
 # Reward configuration - initialized from GameConfig, can be tuned at runtime
 # Combat rewards
@@ -115,6 +113,9 @@ func _ready() -> void:
 	# Initialize episode manager
 	episode_manager = EpisodeManager.new(GameConfig.MAX_EPISODE_STEPS)
 
+	# Initialize player controller for manual control
+	player_controller = PlayerController.new(self)
+
 	# Spawn bases and units
 	var bases = spawn_manager.spawn_bases(episode_manager.get_spawn_sides_swapped())
 	ally_base = bases["ally_base"]
@@ -148,13 +149,8 @@ func get_units():
 	units = get_tree().get_nodes_in_group("units")
 
 func _input(event):
-	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_N:  # N key - Enable AI control
-			ai_controls_allies = true
-			print("AI now controls ally units")
-		elif event.keycode == KEY_M:  # M key - Manual control
-			ai_controls_allies = false
-			print("Manual control enabled for ally units")
+	"""Handle player input by delegating to PlayerController."""
+	player_controller.handle_input(event)
 
 func _physics_process(_delta: float) -> void:
 	tick += 1
@@ -175,7 +171,7 @@ func _physics_process(_delta: float) -> void:
 
 			# Apply actions using ActionHandler
 			for actions: Dictionary in action_batches:
-				action_handler.apply_actions(actions, all_units, ai_controls_allies)
+				action_handler.apply_actions(actions, all_units, player_controller.is_ai_controlling_allies())
 
 			# Build and send observations using ObservationBuilder
 			var obs = observation_builder.build_observation(
@@ -203,12 +199,12 @@ func _physics_process(_delta: float) -> void:
 			# Check for episode end condition using EpisodeManager
 			var should_end_episode = episode_manager.should_end_episode(ai_step, game_won, game_lost)
 
-			# Calculate rewards using RewardCalculator (reuse all_units from line 174)
+			# Calculate rewards using RewardCalculator (reuse all_units from line 170)
 			var rewards = reward_calculator.calculate_rewards(
 				all_units,
 				ally_base,
 				enemy_base,
-				ai_controls_allies,
+				player_controller.is_ai_controlling_allies(),
 				game_won,
 				game_lost,
 				GameConfig.get_map_center()
@@ -283,39 +279,7 @@ func _ai_request_reset() -> void:
 	# Refresh units array
 	get_units()
 
-#new code - lukas
-
+# Manual control - area selection (used for debugging/testing)
 func _on_area_selected(object):
-	var start = object.start
-	var end   = object.end
-
-	var a0 = Vector2(min(start.x, end.x), min(start.y, end.y))
-	var a1 = Vector2(max(start.x, end.x), max(start.y, end.y))
-
-	var ut = get_units_in_area([a0, a1])   # your area query that reads from "ally"
-
-	# 1) Deselect all *live* allies
-	for u in get_tree().get_nodes_in_group("ally"):
-		if u != null and is_instance_valid(u) and u.has_method("set_selected"):
-			u.set_selected(false)
-
-	# 2) Select the ones inside the area
-	for u in ut:
-		if u != null and is_instance_valid(u) and u.has_method("set_selected"):
-			u.set_selected(true)   # or toggle if you prefer
-
-	
-	
-func get_units_in_area(area: Array) -> Array:
-	# area[0] and area[1] might be any corners; normalize first
-	var a0 := Vector2(min(area[0].x, area[1].x), min(area[0].y, area[1].y))
-	var a1 := Vector2(max(area[0].x, area[1].x), max(area[0].y, area[1].y))
-
-	var selected: Array = []
-	for unit in get_tree().get_nodes_in_group("ally"):
-		if unit == null or not is_instance_valid(unit):
-			continue
-		var p: Vector2 = unit.global_position
-		if p.x >= a0.x and p.x <= a1.x and p.y >= a0.y and p.y <= a1.y:
-			selected.append(unit)
-	return selected
+	"""Handle area selection by delegating to PlayerController."""
+	player_controller.handle_area_selection(object)
