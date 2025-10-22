@@ -16,16 +16,36 @@ from ray.rllib.algorithms.ppo import PPOConfig
 from godot_multi_env import GodotRTSMultiAgentEnv
 import os
 
-# Observation space: Box(-1.0, 1.0, (4,))
-# - Normalized x, y position
-# - HP ratio (current/max)
-# - Distance to map center (normalized)
-# Note: Actual observation is 92-dimensional with battle stats, nearby units, and POIs
-OBS_SPACE = gym.spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32)
+# Import central configuration (single source of truth)
+from rts_config import (
+    OBSERVATION_SPACE,
+    ACTION_SPACE,
+    POLICY_NAMES,
+    DEFAULT_TRAINABLE_POLICIES,
+    LEARNING_RATE,
+    ENTROPY_COEFF,
+    GAMMA,
+    CLIP_PARAM,
+    TRAIN_BATCH_SIZE,
+    MINIBATCH_SIZE,
+    NUM_EPOCHS,
+    USE_GAE,
+    GAE_LAMBDA,
+    VF_CLIP_PARAM,
+    FCNET_HIDDENS,
+    FCNET_ACTIVATION,
+    FCNET_WEIGHTS_INITIALIZER,
+    FCNET_BIAS_INITIALIZER,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    DEFAULT_TIMEOUT
+)
 
-# Action space: Discrete(9) - 8 directional movements + stay
-# Actions map to movement offsets applied in godot_multi_env.py
-ACT_SPACE = gym.spaces.Discrete(9)
+# Observation and action spaces imported from central config (rts_config.py)
+# This ensures the training script and environment always stay in sync
+# See rts_config.py for detailed documentation of space structures
+OBS_SPACE = OBSERVATION_SPACE
+ACT_SPACE = ACTION_SPACE
 
 # Three policies with different training configurations
 POLICIES = {
@@ -131,12 +151,12 @@ if __name__ == "__main__":
             else:
                 next_iteration = 1
 
-    print("Observation space defined:", OBS_SPACE)
-    print("Action space defined:", ACT_SPACE)
+    print("Observation space:", OBS_SPACE)
+    print("Action space:", ACT_SPACE)
 
     # Configure which policies to train (can be changed at any time)
     # Set to subset of policy names to freeze specific policies
-    POLICIES_TO_TRAIN = ["policy_LT50", "policy_GT50", "policy_frontline"]  # All trainable by default
+    POLICIES_TO_TRAIN = DEFAULT_TRAINABLE_POLICIES  # From central config
     print(f"\nTraining configuration: {POLICIES_TO_TRAIN}")
     print(f"Frozen policies: {[p for p in POLICIES.keys() if p not in POLICIES_TO_TRAIN]}\n")
 
@@ -152,9 +172,9 @@ if __name__ == "__main__":
         .environment(
             env=GodotRTSMultiAgentEnv,
             env_config={
-                "host": "127.0.0.1",
-                "port": 5555,  # TCP connection to Godot game
-                "timeout": 5,   # Socket timeout in seconds
+                "host": DEFAULT_HOST,
+                "port": DEFAULT_PORT,
+                "timeout": DEFAULT_TIMEOUT,
             },
             disable_env_checking=True,  # Skip gym space validation (custom spaces)
         )
@@ -165,27 +185,27 @@ if __name__ == "__main__":
             rollout_fragment_length=100,  # Steps per rollout fragment
         )
         .training(
-            gamma=0.99,          # Discount factor for future rewards
-            lr=3e-4,             # Learning rate (standard PPO: 3e-4)
-            train_batch_size=2000,   # Total timesteps per training iteration
-            minibatch_size=500,     # Batch size for SGD (split train_batch into chunks)
-            num_epochs=10,          # Number of SGD passes over each batch
-            clip_param=0.2,         # PPO clip parameter (prevent large policy updates)
-            vf_clip_param=10.0,     # Value function clip parameter
-            use_gae=True,           # Use Generalized Advantage Estimation
-            lambda_=0.9,            # GAE lambda parameter (bias-variance tradeoff)
-            entropy_coeff=0.01,    # Entropy bonus for exploration (REDUCED from 0.1 for Box(2) action space - prevents action noise)
+            gamma=GAMMA,
+            lr=LEARNING_RATE,  # Reduced from 3e-4 to 1e-4 in central config
+            train_batch_size=TRAIN_BATCH_SIZE,
+            minibatch_size=MINIBATCH_SIZE,
+            num_epochs=NUM_EPOCHS,
+            clip_param=CLIP_PARAM,
+            vf_clip_param=VF_CLIP_PARAM,
+            use_gae=USE_GAE,
+            lambda_=GAE_LAMBDA,
+            entropy_coeff=ENTROPY_COEFF,
         )
         .rl_module(
             model_config={
-                "fcnet_hiddens": [128,256,128],                    # 3-layer MLP, known to work: [64,64,64] with 89dim obs space
-                "fcnet_activation": "tanh",                     # Tanh activation function
-                "fcnet_weights_initializer": "xavier_uniform_", # Xavier uniform weight init
-                "fcnet_bias_initializer": "zeros_",             # Zero bias initialization
+                "fcnet_hiddens": FCNET_HIDDENS,
+                "fcnet_activation": FCNET_ACTIVATION,
+                "fcnet_weights_initializer": FCNET_WEIGHTS_INITIALIZER,
+                "fcnet_bias_initializer": FCNET_BIAS_INITIALIZER,
             }
         )
         .multi_agent(
-            policies={"policy_LT50", "policy_GT50", "policy_frontline"},
+            policies=POLICY_NAMES,  # From central config
             policy_mapping_fn=policy_mapping_fn,
             # Use POLICIES_TO_TRAIN variable to control which policies are trained
             # Policies not in this list will be frozen (inference only, no gradient updates)
@@ -209,17 +229,15 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     # Checkpoint loading configuration
     # Priority: latest numbered checkpoint > checkpoint_3policy > train from scratch
-    skip_checkpoint_loading = False  # Set to True to train from scratch - ENABLED for fresh start
+    skip_checkpoint_loading = False  # Set to True to train from scratch
 
     # Determine which checkpoint to load
     checkpoint_to_load = None
     if not skip_checkpoint_loading:
         if latest_checkpoint:
-            # Load most recent training checkpoint to continue from where we left off
             checkpoint_to_load = latest_checkpoint
             print(f"Found latest checkpoint: {checkpoint_to_load}")
         else:
-            # Fallback to baseline 3-policy checkpoint if no training checkpoints exist
             checkpoint_3policy = os.path.abspath("./checkpoints/checkpoint_3policy")
             if os.path.exists(checkpoint_3policy):
                 checkpoint_to_load = checkpoint_3policy
@@ -227,21 +245,68 @@ if __name__ == "__main__":
             else:
                 print("No checkpoints found, training from scratch")
 
+    # Build algorithm
+    print("Building algorithm...")
+    algo = cfg.build()
+
+    # Restore from checkpoint if available
     if checkpoint_to_load:
-        print(f"Restoring algorithm from checkpoint: {checkpoint_to_load}")
-        algo = cfg.build()
+        print(f"Restoring from checkpoint: {checkpoint_to_load}")
         try:
             algo.restore(checkpoint_to_load)
-            print("Algorithm restored successfully!")
-            print(f"  Loaded 3 policies: LT50 (trainable), GT50 (frozen baseline), frontline (trainable)")
+            print("✓ Algorithm restored successfully!")
+            print(f"  Loaded 3 policies: LT50, GT50, frontline")
+
+            # Manually update all training hyperparameters post-restore
+            # This allows tuning hyperparameters between runs without losing progress
+            print(f"\n  Updating training hyperparameters from rts_config.py:")
+            print(f"    Learning rate: {LEARNING_RATE}")
+            print(f"    Entropy coefficient: {ENTROPY_COEFF}")
+            print(f"    Gamma (discount): {GAMMA}")
+            print(f"    PPO clip param: {CLIP_PARAM}")
+            print(f"    VF clip param: {VF_CLIP_PARAM}")
+            print(f"    GAE lambda: {GAE_LAMBDA}")
+
+            try:
+                # Update the algorithm's config object (used for future operations)
+                algo.config.training(
+                    lr=LEARNING_RATE,
+                    entropy_coeff=ENTROPY_COEFF,
+                    gamma=GAMMA,
+                    clip_param=CLIP_PARAM,
+                    vf_clip_param=VF_CLIP_PARAM,
+                    lambda_=GAE_LAMBDA,
+                )
+
+                # Access learner group and update optimizer settings directly
+                learner_group = algo.learner_group
+                if learner_group and hasattr(learner_group, '_learners'):
+                    for learner in learner_group._learners:
+                        # Update optimizer learning rate
+                        if hasattr(learner, '_optimizer') and learner._optimizer is not None:
+                            for param_group in learner._optimizer.param_groups:
+                                param_group['lr'] = LEARNING_RATE
+
+                        # Update learner config if accessible
+                        if hasattr(learner, '_hps'):
+                            learner._hps.lr = LEARNING_RATE
+                            learner._hps.entropy_coeff = ENTROPY_COEFF
+                            learner._hps.gamma = GAMMA
+                            learner._hps.clip_param = CLIP_PARAM
+                            learner._hps.vf_clip_param = VF_CLIP_PARAM
+                            learner._hps.lambda_ = GAE_LAMBDA
+
+                print("  ✓ Hyperparameters updated successfully!")
+            except Exception as e:
+                print(f"  ⚠ WARNING: Could not fully update hyperparameters: {e}")
+                print(f"    Training will attempt to continue anyway...")
+
         except Exception as e:
-            print(f"WARNING: Failed to restore checkpoint: {e}")
-            print("Starting fresh training instead...")
-            algo = cfg.build()
+            print(f"✗ WARNING: Failed to restore checkpoint: {e}")
+            print("  Continuing with fresh algorithm...")
     else:
-        print("Building new algorithm (training from scratch)...")
-        algo = cfg.build()
-        print("Algorithm built successfully!")
+        print("No checkpoint to restore - training from scratch")
+
     print("="*50 + "\n")
 
     try:

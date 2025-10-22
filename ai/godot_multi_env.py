@@ -7,6 +7,16 @@ import time
 import numpy as np
 from typing import Dict, Any, Tuple, Optional
 
+# Import central configuration
+from rts_config import (
+    OBSERVATION_SPACE,
+    ACTION_SPACE,
+    POSSIBLE_AGENT_IDS,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    DEFAULT_TIMEOUT
+)
+
 class GodotRTSMultiAgentEnv(MultiAgentEnv):
     """
     Multi-agent RTS environment bridge between Godot game and Ray RLlib.
@@ -24,19 +34,19 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
 
     def __init__(self, env_config: Dict[str, Any]):
         super().__init__()
-        # TCP connection configuration
-        self.host = env_config.get("host", "127.0.0.1")
-        self.port = env_config.get("port", 5555)
-        self.timeout = env_config.get("timeout", 2.0)
+        # TCP connection configuration (use central config defaults)
+        self.host = env_config.get("host", DEFAULT_HOST)
+        self.port = env_config.get("port", DEFAULT_PORT)
+        self.timeout = env_config.get("timeout", DEFAULT_TIMEOUT)
         print(f"GodotRTSMultiAgentEnv: Connecting to Godot RTS game at {self.host}:{self.port}")
 
         # Socket state
         self.socket: Optional[socket.socket] = None
         self.connected = False
 
-        # Agent tracking (100 units: u1-u100)
+        # Agent tracking (uses POSSIBLE_AGENT_IDS from central config)
         self.agents = set()  # Currently active agents in this episode
-        self.possible_agents = [f"u{i}" for i in range(1, 1001)]  # All possible unit IDs
+        self.possible_agents = POSSIBLE_AGENT_IDS  # All possible unit IDs from config
         self.last_obs = {}  # Cache of last observation for each agent
 
         # Multi-policy support: Track which policy each unit is assigned to
@@ -47,18 +57,10 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         self.episode_step = 0
         self.episode_ended = False
 
-        # Observation space: 94-dimensional vector
-        # - Base (3): vel_x, vel_y, hp_ratio (velocity replaces position for position-invariant learning)
-        # - Battle stats (5): attack_range, attack_damage, attack_cooldown, cooldown_remaining, speed
-        # - Closest allies (40): 10 units × (direction_x, direction_y, distance, hp_ratio)
-        # - Closest enemies (40): 10 units × (direction_x, direction_y, distance, hp_ratio)
-        # - Points of interest (6): 2 POIs × (direction_x, direction_y, distance)
-        self.observation_space = Box(low=-1.0, high=10.0, shape=(94,), dtype=np.float32)
-
-        # Action space: Continuous 2D movement vector
-        # Actions are [dx, dy] in range [-1, 1] representing movement direction and magnitude
-        # The vector is normalized and scaled by unit speed in Godot
-        self.action_space = Box(low=-1.0, high=1.0, shape=(2,), dtype=np.float32)
+        # Observation and action spaces (imported from central config)
+        # See rts_config.py for detailed space documentation
+        self.observation_space = OBSERVATION_SPACE
+        self.action_space = ACTION_SPACE
 
         # Multi-agent spaces - initialize with possible agents
         self.observation_spaces = {}
@@ -70,7 +72,9 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             self.action_spaces[agent_id] = self.action_space
 
         print(f"GodotRTSMultiAgentEnv initialized: {self.host}:{self.port}")
-        print(f"Pre-defined possible agents: {self.possible_agents}")
+        print(f"Observation space: {self.observation_space}")
+        print(f"Action space: {self.action_space}")
+        print(f"Pre-defined possible agents: {len(self.possible_agents)} agents")
 
     def get_agent_ids(self):
         """Return current active agent IDs"""
