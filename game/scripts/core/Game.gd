@@ -47,6 +47,7 @@ var enemy_base: Node = null
 var reward_calculator: RewardCalculator = null
 var observation_builder: ObservationBuilder = null
 var action_handler: ActionHandler = null
+var spawn_manager: SpawnManager = null
 
 # Reward configuration - initialized from GameConfig, can be tuned at runtime
 # Combat rewards
@@ -109,7 +110,21 @@ func _ready() -> void:
 		map_h
 	)
 
-	spawn_bases()
+	# Initialize spawn manager
+	spawn_manager = SpawnManager.new(
+		map_w,
+		map_h,
+		num_ally_units_start,
+		num_enemy_units_start,
+		base_scene,
+		self  # Parent node for spawned entities
+	)
+
+	# Spawn bases and units
+	var bases = spawn_manager.spawn_bases(swap_spawn_sides)
+	ally_base = bases["ally_base"]
+	enemy_base = bases["enemy_base"]
+
 	init_units()
 	get_units()
 
@@ -117,133 +132,21 @@ func _ready() -> void:
 	add_to_group("game")
 	print("Game: Added to 'game' group")
 
-func spawn_bases():
-	"""
-	Spawn ally and enemy bases randomly within their respective halves of the map.
-
-	Map halves (with spawn side alternation):
-	- Normal (even episodes): Ally left half, Enemy right half
-	- Swapped (odd episodes): Ally right half, Enemy left half
-
-	Random placement ensures varied strategic scenarios and prevents
-	position-specific learning.
-	"""
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-
-	# Define safe margins from map edges (from GameConfig)
-	var margin_x = GameConfig.BASE_SPAWN_MARGIN_X
-	var margin_y = GameConfig.BASE_SPAWN_MARGIN_Y
-
-	# Calculate team halves
-	var half_map_x = GameConfig.get_half_map_width()
-
-	# Determine which half each team spawns in
-	var ally_x_min: float
-	var ally_x_max: float
-	var enemy_x_min: float
-	var enemy_x_max: float
-
-	if not swap_spawn_sides:
-		# Normal: Ally left, Enemy right
-		ally_x_min = margin_x
-		ally_x_max = half_map_x - margin_x
-		enemy_x_min = half_map_x + margin_x
-		enemy_x_max = map_w - margin_x
-	else:
-		# Swapped: Ally right, Enemy left
-		ally_x_min = half_map_x + margin_x
-		ally_x_max = map_w - margin_x
-		enemy_x_min = margin_x
-		enemy_x_max = half_map_x - margin_x
-
-	# Random positions within team halves
-	var ally_base_x = rng.randf_range(ally_x_min, ally_x_max)
-	var ally_base_y = rng.randf_range(margin_y, map_h - margin_y)
-	var enemy_base_x = rng.randf_range(enemy_x_min, enemy_x_max)
-	var enemy_base_y = rng.randf_range(margin_y, map_h - margin_y)
-
-	# Spawn ally base
-	ally_base = base_scene.instantiate()
-	ally_base.is_enemy = false
-	ally_base.position = Vector2(ally_base_x, ally_base_y)
-	add_child(ally_base)
-	print("Spawned ally base at (", ally_base_x, ", ", ally_base_y, ")")
-
-	# Spawn enemy base
-	enemy_base = base_scene.instantiate()
-	enemy_base.is_enemy = true
-	enemy_base.position = Vector2(enemy_base_x, enemy_base_y)
-	add_child(enemy_base)
-	print("Spawned enemy base at (", enemy_base_x, ", ", enemy_base_y, ")")
-
-func spawn_all_units():
-	"""
-	Spawn all ally and enemy units with a mix of infantry and snipers.
-
-	Implements spawn side alternation for position-invariant learning:
-	- Even episodes (0, 2, 4...): allies spawn left (x=300), enemies right (x=700)
-	- Odd episodes (1, 3, 5...): allies spawn right (x=700), enemies left (x=300)
-
-	This prevents the AI from learning position-specific strategies and ensures
-	robust tactical behavior regardless of spawn location.
-
-	Unit composition:
-	- 50 ally units: 1/3 snipers (long range), 2/3 infantry (balanced)
-	- 50 enemy units: 1/3 snipers (long range), 2/3 infantry (balanced)
-
-	Units are spawned in a grid formation (from GameConfig).
-	"""
-
-	var spawnbox_start_x_1 = GameConfig.UNIT_SPAWNBOX_X_LEFT
-	var spawnbox_start_y_1 = GameConfig.UNIT_SPAWNBOX_Y
-
-	var spawnbox_start_x_2 = GameConfig.UNIT_SPAWNBOX_X_RIGHT
-	var spawnbox_start_y_2 = GameConfig.UNIT_SPAWNBOX_Y
-
-	var spawn_spacing_x = GameConfig.UNIT_SPAWN_SPACING_X
-	var spawn_spacing_y = GameConfig.UNIT_SPAWN_SPACING_Y
-
-	var spawn_rows = GameConfig.UNIT_SPAWN_COLUMNS
-
-	# Determine spawn positions based on swap_spawn_sides
-	var ally_x = spawnbox_start_x_1 if not swap_spawn_sides else spawnbox_start_x_2
-	var ally_y = spawnbox_start_y_1 if not swap_spawn_sides else spawnbox_start_y_2
-	var enemy_x = spawnbox_start_x_2 if not swap_spawn_sides else spawnbox_start_x_1
-	var enemy_y = spawnbox_start_y_2 if not swap_spawn_sides else spawnbox_start_y_1
-
-	var spawn_side_label = "normal" if not swap_spawn_sides else "SWAPPED"
-	print("Spawning units (", spawn_side_label, "): allies at (", ally_x, ", ", ally_y, "), enemies at (", enemy_x, ", ", enemy_y, ")")
-
-	# Create ally units with sequential IDs (mix of infantry and snipers)
-	print("Creating ally units...")
-	for i in range(num_ally_units_start):
-		var pos = Vector2(ally_x + (i % spawn_rows) * spawn_spacing_x, ally_y + (i / spawn_rows) * spawn_spacing_y)
-		# Spawn snipers based on GameConfig interval
-		var unit_type = Global.UnitType.SNIPER if i % GameConfig.SNIPER_SPAWN_INTERVAL == 0 else Global.UnitType.INFANTRY
-		Global.spawnUnit(pos, false, unit_type)
-
-	# Create enemy units with sequential IDs (mix of infantry and snipers)
-	print("Creating enemy units...")
-	for i in range(num_enemy_units_start):
-		var pos = Vector2(enemy_x + (i % spawn_rows) * spawn_spacing_x, enemy_y + (i / spawn_rows) * spawn_spacing_y)
-		# Spawn snipers based on GameConfig interval
-		var unit_type = Global.UnitType.SNIPER if i % GameConfig.SNIPER_SPAWN_INTERVAL == 0 else Global.UnitType.INFANTRY
-		Global.spawnUnit(pos, true, unit_type)
-
 func init_units():
-	print("Starting init_units()")
+	"""Initialize units container and spawn all units."""
+	print("Game: Starting init_units()")
 
 	var units_container = get_node("Units")
-	print("Units container found: ", units_container != null)
+	print("Game: Units container found: ", units_container != null)
 	if not units_container:
 		units_container = Node2D.new()
 		units_container.name = "Units"
 		add_child(units_container)
-		print("Created new Units container")
+		print("Game: Created new Units container")
 
-	spawn_all_units()
-	print("init_units() completed")
+	# Spawn all units using spawn manager
+	spawn_manager.spawn_all_units(swap_spawn_sides)
+	print("Game: init_units() completed")
 
 func get_units():
 	units = null
@@ -389,18 +292,28 @@ func _ai_request_reset() -> void:
 	# Reset unit ID counter to start fresh
 	Global.next_unit_id = 1
 
-	# Respawn bases and units using the reusable functions
-	print("Respawning bases and units (episode ", episode_count, ")...")
-	spawn_bases()
-	spawn_all_units()
+	# Respawn bases and units using spawn manager
+	print("Game: Respawning bases and units (episode ", episode_count, ")...")
+	var bases = spawn_manager.spawn_bases(swap_spawn_sides)
+	ally_base = bases["ally_base"]
+	enemy_base = bases["enemy_base"]
+
+	spawn_manager.spawn_all_units(swap_spawn_sides)
 
 	# Refresh units array
 	get_units()
 
 	print("Game: Reset complete with ", num_ally_units_start, " ally units and ", num_enemy_units_start, " enemy units")
 
-	# Send initial observation immediately after reset
-	var obs := _build_observation()
+	# Send initial observation immediately after reset using ObservationBuilder
+	var all_units = get_tree().get_nodes_in_group("units")
+	var obs = observation_builder.build_observation(
+		ai_step,
+		tick,
+		all_units,
+		ally_base,
+		enemy_base
+	)
 	print("Game: Sending initial observation with ", obs["units"].size(), " units")
 	AiServer.send_observation(obs)
 
