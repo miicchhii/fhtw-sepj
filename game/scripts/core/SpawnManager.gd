@@ -88,7 +88,7 @@ func spawn_bases(swap_spawn_sides: bool) -> Dictionary:
 	var ally_base_x = rng.randf_range(ally_x_min, ally_x_max)
 	var ally_base_y = rng.randf_range(margin_y, map_h - margin_y)
 	var enemy_base_x = rng.randf_range(enemy_x_min, enemy_x_max)
-	var enemy_base_y = rng.randf_range(enemy_y, map_h - margin_y)
+	var enemy_base_y = rng.randf_range(margin_y, map_h - margin_y)
 
 	# Spawn ally base
 	var ally_base = base_scene.instantiate()

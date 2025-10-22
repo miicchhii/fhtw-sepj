@@ -38,17 +38,17 @@ func handle_input(event: InputEvent) -> void:
 			ai_controls_allies = false
 			print("PlayerController: Manual control enabled for ally units")
 
-func handle_area_selection(selection_object: Dictionary) -> void:
+func handle_area_selection(selection_object) -> void:
 	"""
 	Handle area selection for units (drag selection).
 
 	Deselects all ally units, then selects units within the dragged area.
 
 	Args:
-		selection_object: Dictionary with 'start' and 'end' Vector2 positions
+		selection_object: Object with 'start' and 'end' Vector2 properties
 	"""
-	var start = selection_object.get("start", Vector2.ZERO)
-	var end = selection_object.get("end", Vector2.ZERO)
+	var start = selection_object.start
+	var end = selection_object.end
 
 	# Normalize rectangle corners
 	var a0 = Vector2(min(start.x, end.x), min(start.y, end.y))
