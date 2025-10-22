@@ -203,8 +203,7 @@ func _physics_process(_delta: float) -> void:
 			# Check for episode end condition using EpisodeManager
 			var should_end_episode = episode_manager.should_end_episode(ai_step, game_won, game_lost)
 
-			# Calculate rewards using RewardCalculator
-			var all_units = get_tree().get_nodes_in_group("units")
+			# Calculate rewards using RewardCalculator (reuse all_units from line 174)
 			var rewards = reward_calculator.calculate_rewards(
 				all_units,
 				ally_base,
