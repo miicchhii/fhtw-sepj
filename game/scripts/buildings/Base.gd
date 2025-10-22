@@ -9,7 +9,7 @@ class_name Base
 @export var is_enemy: bool = false   # True for enemy base, False for ally base
 
 # Health properties
-@export var max_hp: int = 1000       # Maximum base health
+@export var max_hp: int = 5000       # Maximum base health
 var hp: int = max_hp                  # Current health
 
 # Visual components

@@ -97,7 +97,7 @@ ACTION_SPACE = gym.spaces.Box(
 # AGENT CONFIGURATION
 # ============================================================================
 # Number of possible agents (RTS units)
-MAX_AGENTS = 1000
+MAX_AGENTS = 10000
 
 # Agent ID format: "u{number}" (e.g., "u1", "u2", ..., "u1000")
 POSSIBLE_AGENT_IDS = [f"u{i}" for i in range(1, MAX_AGENTS + 1)]
