@@ -1,7 +1,5 @@
 extends Node
 
-@onready var spawn = preload("res://scenes/world/spawn_unit.tscn")
-
 var Steel = 0
 var Coin = 0
 var next_unit_id = 1

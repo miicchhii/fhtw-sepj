@@ -5,8 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://d4bosjhg4k1ec" path="res://RTSAssets/run.png" id="3_h7vdh"]
 [ext_resource type="Texture2D" uid="uid://bnxyfa5x1mooo" path="res://RTSAssets/Robot_fire.png" id="4_lqysx"]
 
-[sub_resource type="RectangleShape2D" id="RectangleShape2D_tf0sc"]
-size = Vector2(18, 53)
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_lqysx"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tf0sc"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
@@ -148,18 +147,18 @@ _data = {
 }
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lqysx"]
-bg_color = Color(2.21401e-06, 0.69626, 0.615668, 1)
+bg_color = Color(1, 0, 0, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_vome1"]
-bg_color = Color(0.859936, 0.499734, 0, 1)
+bg_color = Color(0, 1, 0, 1)
 
-[node name="Infantry" type="CharacterBody2D"]
-collision_layer = 524288
+[node name="RTSUnit" type="CharacterBody2D"]
+collision_layer = 524289
 script = ExtResource("1_twhwq")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2(-1, -1.5)
-shape = SubResource("RectangleShape2D_tf0sc")
+position = Vector2(0, 18.25)
+shape = SubResource("RectangleShape2D_lqysx")
 one_way_collision_margin = 0.0
 
 [node name="idle" type="Sprite2D" parent="."]
@@ -182,9 +181,9 @@ hframes = 4
 frame = 1
 
 [node name="Box" type="Panel" parent="."]
-offset_left = -13.0
+offset_left = -12.999996
 offset_top = -32.0
-offset_right = -6.0
+offset_right = -5.999996
 offset_bottom = -24.0
 scale = Vector2(3.84143, 8.10369)
 theme_override_styles/panel = SubResource("StyleBoxFlat_tf0sc")

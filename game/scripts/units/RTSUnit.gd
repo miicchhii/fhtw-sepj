@@ -1,23 +1,39 @@
 # RTSUnit.gd - Base class for all RTS units
+#
+# This is the base class for all controllable RTS units in the game.
+# Units can be controlled by:
+# - AI policies (via Python PPO training)
+# - Player input (when selected)
+#
+# Multi-policy support:
+# - Each unit has a policy_id that determines which AI model controls it
+# - Policies can be changed at runtime via set_policy()
+# - Policy assignments are sent to Python in observations
 extends CharacterBody2D
 class_name RTSUnit
 
-@export var is_enemy: bool = false   # same scene, different faction
+# Faction assignment
+@export var is_enemy: bool = false   # True for enemies, False for allies
 
-@export var unit_id: String = ""
-@export var type_id: int = 0
-@export var max_hp: int = 100
-var hp: int = max_hp
+# Unit identification
+@export var unit_id: String = ""     # Unique ID (e.g., "u25", "u87")
+@export var type_id: int = 0         # Unit type (0=Infantry, 1=Sniper)
+@export var max_hp: int = 100        # Maximum health points
+var hp: int                          # Current health points (set in _ready)
 
-# Combat properties - can be overridden by subclasses
-var attack_range := 64.0        # must be inside this to hit
-var attack_damage := 15
-var attack_cooldown := 0.8
-var Speed := 50
+# AI policy assignment for multi-policy training
+# Determines which neural network model controls this unit
+var policy_id: String = ""  # e.g., "policy_LT50", "policy_GT50", "policy_frontline"
 
-# Combat state
-var attack_target: Node = null
-var _atk_cd := 0.0
+# Combat properties - can be overridden by subclasses (Infantry, Sniper, etc.)
+var attack_range := 64.0        # Must be within this range to attack
+var attack_damage := 15         # Damage per hit
+var attack_cooldown := 0.8      # Seconds between attacks
+var Speed := 50                 # Movement speed (pixels per second)
+
+# Combat state tracking
+var attack_target: Node = null  # Currently targeted enemy/ally
+var _atk_cd := 0.0              # Attack cooldown timer
 
 @export var selected = false
 @onready var box = get_node("Box")
@@ -30,15 +46,30 @@ var follow_cursor = false
 
 var target: Vector2
 
-# Combat tracking for rewards
-var damage_dealt_this_step: int = 0
-var damage_received_this_step: int = 0
-var kills_this_step: int = 0
-var died_this_step: bool = false
+# POI visualization
+var poi_positions: Array = []  # Store POI positions for drawing debug lines
+var closest_allies_positions: Array = []  # Store closest ally positions
+var closest_enemies_positions: Array = []  # Store closest enemy positions
+
+# Combat tracking for RL reward calculation
+# These stats are reset each AI step and used to compute rewards in Game.gd
+var damage_dealt_this_step: int = 0      # Damage dealt to enemy units this step
+var damage_to_base_this_step: int = 0    # Damage dealt to enemy base this step (worth more)
+var damage_received_this_step: int = 0   # Damage received from enemies this step
+var kills_this_step: int = 0             # Number of kills this step (units)
+var base_kills_this_step: int = 0        # Number of base kills this step (worth more)
+var died_this_step: bool = false         # True if unit died this step
+
+# Direction change tracking for movement efficiency reward
+var previous_move_direction: Vector2 = Vector2.ZERO  # Last movement direction vector
+var direction_change_reward: float = 0.0  # Reward/penalty for direction consistency
 
 func _ready() -> void:
 	# Set unit-specific stats first
 	_initialize_unit_stats()
+
+	# Assign policy based on unit_id number
+	_assign_policy()
 
 	# mark enemies and keep them unselectable
 	if is_enemy:
@@ -46,18 +77,19 @@ func _ready() -> void:
 		# Enemies are not selectable / don't respond to player input
 		selected = false
 		set_selected(selected)
-		# Apply red tint while preserving unit-specific colors
-		var current_color = modulate
-		modulate = Color(current_color.r * 1.0, current_color.g * 0.314, current_color.b * 0.335, 1.0)
+		# Apply red tint to sprites only (not healthbar/UI)
+		_apply_enemy_tint()
 	else:
 		add_to_group("ally")
+
+	# Set current HP to match max HP before updating the HP bar
+	hp = max_hp
 	_update_hp_bar()
 
 	set_selected(selected)
 	add_to_group("units", true)
-	print("Unit ", unit_id, " final stats: HP=", max_hp, " Range=", attack_range, " Damage=", attack_damage, " Speed=", Speed)
+	print("Unit ", unit_id, " final stats: HP=", max_hp, " Range=", attack_range, " Damage=", attack_damage, " Speed=", Speed, " Policy=", policy_id)
 	print("Unit ", unit_id, " added to groups: ", get_groups())
-	hp = max_hp
 	target = global_position
 	target_click = global_position  # Initialize both targets to current position
 
@@ -65,6 +97,46 @@ func _ready() -> void:
 func _initialize_unit_stats() -> void:
 	# Base stats - subclasses should override this
 	pass
+
+func _assign_policy() -> void:
+	"""
+	Assign initial AI policy based on faction.
+
+	Policy distribution:
+	- Allies (is_enemy=false) → policy_LT50 (trainable)
+	- Enemies (is_enemy=true) → policy_GT50 (trainable)
+
+	This assignment can be changed at runtime via set_policy().
+	"""
+	if is_enemy:
+		policy_id = "policy_GT50"  # Enemy team policy
+	else:
+		policy_id = "policy_LT50"  # Ally team policy
+
+func _apply_enemy_tint() -> void:
+	"""
+	Apply red tint to sprite nodes only (not healthbar/UI).
+	Preserves unit-specific colors while adding enemy team identification.
+	"""
+	# Apply red tint to all Sprite2D children
+	for child in get_children():
+		if child is Sprite2D:
+			var current_color = child.modulate
+			child.modulate = Color(current_color.r * 1.0, current_color.g * 0.314, current_color.b * 0.335, 1.0)
+
+func set_policy(new_policy_id: String) -> void:
+	"""
+	Change this unit's AI policy at runtime.
+
+	Enables dynamic policy switching during gameplay or training.
+	The new policy takes effect on the next AI step.
+
+	Args:
+		new_policy_id: Name of the policy (e.g., "policy_LT50", "policy_frontline")
+	"""
+	if policy_id != new_policy_id:
+		print("Unit ", unit_id, " policy changed: ", policy_id, " -> ", new_policy_id)
+		policy_id = new_policy_id
 
 func set_move_target(p: Vector2) -> void:
 	target = p
@@ -78,6 +150,49 @@ func step(_delta: float) -> void:
 func set_selected(value):
 	selected = value
 	box.visible = value
+	queue_redraw()  # Redraw when selection changes
+
+func set_poi_positions(pois: Array):
+	"""Update POI positions for debug visualization"""
+	poi_positions = pois
+	if selected:
+		queue_redraw()  # Redraw if selected
+
+func set_closest_units_positions(allies: Array, enemies: Array):
+	"""Update closest ally/enemy positions for debug visualization"""
+	closest_allies_positions = allies
+	closest_enemies_positions = enemies
+	if selected:
+		queue_redraw()  # Redraw if selected
+
+func _draw():
+	"""Draw debug lines to POIs, allies, and enemies when unit is selected"""
+	if not selected or is_enemy:  # Only draw for selected ally units
+		return
+
+	# Draw attack range circle (semi-transparent white)
+	draw_arc(Vector2.ZERO, attack_range, 0, TAU, 64, Color(1.0, 1.0, 1.0, 0.3), 2.0, true)
+
+	# Always draw lines to POIs (yellow)
+	for poi in poi_positions:
+		var local_poi = poi - global_position
+		draw_line(Vector2.ZERO, local_poi, Color.YELLOW, 2.0)
+
+	# Check if this is the only selected unit
+	var selected_allies = get_tree().get_nodes_in_group("ally").filter(func(u): return u.selected)
+	var is_only_selected = selected_allies.size() == 1
+
+	# Only draw ally/enemy lines if this is the only selected unit
+	if is_only_selected:
+		# Draw lines to closest allies (blue)
+		for ally_pos in closest_allies_positions:
+			var local_ally = ally_pos - global_position
+			draw_line(Vector2.ZERO, local_ally, Color.BLUE, 1.5)
+
+		# Draw lines to closest enemies (red)
+		for enemy_pos in closest_enemies_positions:
+			var local_enemy = enemy_pos - global_position
+			draw_line(Vector2.ZERO, local_enemy, Color.RED, 1.5)
 
 func _input(event):
 	if is_enemy:
@@ -116,7 +231,10 @@ func _physics_process(delta):
 
 		# acquire a target only if it's already inside attack_range
 		if attack_target == null:
+			# Prioritize enemy units, but also attack enemy base if in range
 			attack_target = _pick_enemy_in_range(attack_range)
+			if attack_target == null:
+				attack_target = _pick_enemy_base_in_range(attack_range)
 
 		if attack_target:
 			# if target left range, drop it (no chasing)
@@ -148,7 +266,10 @@ func _physics_process(delta):
 
 		# acquire a target only if it's already inside attack_range
 		if attack_target == null:
+			# Prioritize ally units, but also attack ally base if in range
 			attack_target = _pick_ally_in_range(attack_range)
+			if attack_target == null:
+				attack_target = _pick_ally_base_in_range(attack_range)
 
 		if attack_target:
 			var d := position.distance_to(attack_target.global_position)
@@ -193,9 +314,12 @@ func _update_hp_bar() -> void:
 func reset_combat_stats() -> void:
 	# Reset combat tracking for next step
 	damage_dealt_this_step = 0
+	damage_to_base_this_step = 0
 	damage_received_this_step = 0
 	kills_this_step = 0
+	base_kills_this_step = 0
 	died_this_step = false
+	direction_change_reward = 0.0
 
 func _pick_enemy_in_range(radius: float) -> Node:
 	var best: Node = null
@@ -220,3 +344,23 @@ func _pick_ally_in_range(radius: float) -> Node:
 			best = n
 			best_d = d
 	return best
+
+func _pick_enemy_base_in_range(radius: float) -> Node:
+	var bases = get_tree().get_nodes_in_group("enemy_base")
+	if bases.size() > 0:
+		var base = bases[0]
+		if is_instance_valid(base):
+			var d := position.distance_to(base.global_position)
+			if d <= radius:
+				return base
+	return null
+
+func _pick_ally_base_in_range(radius: float) -> Node:
+	var bases = get_tree().get_nodes_in_group("ally_base")
+	if bases.size() > 0:
+		var base = bases[0]
+		if is_instance_valid(base):
+			var d := position.distance_to(base.global_position)
+			if d <= radius:
+				return base
+	return null

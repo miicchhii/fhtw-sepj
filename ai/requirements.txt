@@ -1,10 +1,10 @@
 ray[rllib]
 ray[tune]
+pyarrow
 dm-tree
 gymnasium
 torch
 stable-baselines3[extra]
-ray[tune]
 scipy
 lz4
 ipywidgets
