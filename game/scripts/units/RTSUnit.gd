@@ -255,7 +255,7 @@ func _physics_process(delta):
 							if attack_target.hp <= 0:
 								kills_this_step += 1
 					if has_node("AnimationPlayer"):
-						$AnimationPlayer.play("Attack") # ok if missing
+						anim.play("Attack") # ok if missing
 					_atk_cd = attack_cooldown
 	
 		# --- Enemy units: attack ONLY when an ally is already in range ---
@@ -287,7 +287,7 @@ func _physics_process(delta):
 						if attack_target.hp <= 0:
 							kills_this_step += 1
 					if has_node("AnimationPlayer"):
-						$AnimationPlayer.play("Attack")
+						anim.play("Attack")
 					_atk_cd = attack_cooldown
 
 		
@@ -300,7 +300,7 @@ func apply_damage(amount: int, attacker: RTSUnit = null) -> void:
 	damage_received_this_step += actual_damage
 
 	if has_node("AnimationPlayer"):
-		$AnimationPlayer.play("Attack")
+		anim.play("Attack")
 	_update_hp_bar()
 	if hp == 0:
 		died_this_step = true

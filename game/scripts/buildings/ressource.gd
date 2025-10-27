@@ -51,5 +51,5 @@ func startMining():
 	timer.start()
 	
 func ressourceMined():
-	Global.Steel += 1
+	Global.Uranium += 1
 	queue_free()

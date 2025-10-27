@@ -7,7 +7,7 @@ var spread = PI/2
 
 func show_value(value, crit):
 	var tween = create_tween()
-	text = "+ " + str(value) + "g"
+	text = "+ " + str(value) + "m"
 	pivot_offset = size / 4
 	
 	var movement = travel.rotated(randi_range(-spread/2, spread/2))

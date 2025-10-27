@@ -19,6 +19,8 @@ bg_color = Color(0.859936, 0.499734, 0, 1)
 script = ExtResource("1_ahymo")
 
 [node name="Ressource" type="Sprite2D" parent="."]
+modulate = Color(0.4509804, 1, 0.4862745, 1)
+self_modulate = Color(0.8, 1, 0.8117647, 1)
 position = Vector2(0, -6)
 scale = Vector2(0.0375, 0.0375)
 texture = ExtResource("2_e08dl")

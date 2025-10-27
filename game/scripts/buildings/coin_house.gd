@@ -26,7 +26,7 @@ func _on_timer_timeout() -> void:
 	tween.tween_property(bar, "value", currTime, 0.1).set_trans(Tween.TRANS_LINEAR)
 	
 func coinsCollected():
-	Global.Coin += 10
+	Global.Metal += 10
 	_ready()
 	var pop = POP.instantiate()
 	add_child(pop)

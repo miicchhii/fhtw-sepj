@@ -1,7 +1,7 @@
 extends Node
 
-var Steel = 0
-var Coin = 0
+var Uranium = 0
+var Metal = 0
 var next_unit_id = 1
 
 func get_next_unit_id() -> String:
@@ -11,7 +11,8 @@ func get_next_unit_id() -> String:
 
 enum UnitType {
 	INFANTRY,
-	SNIPER
+	SNIPER,
+	HEAVY
 }
 
 func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFANTRY):
@@ -25,6 +26,9 @@ func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFAN
 		UnitType.SNIPER:
 			unit_scene = preload("res://scenes/units/sniper.tscn")
 			unit_type_name = "Sniper"
+		UnitType.HEAVY:
+			unit_scene = preload("res://scenes/units/Heavy.tscn")
+			unit_type_name = "Heavy"
 
 	var unit = unit_scene.instantiate()
 
