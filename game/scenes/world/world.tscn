@@ -1,9 +1,10 @@
-[gd_scene load_steps=10 format=4 uid="uid://ec25jx2deodc"]
+[gd_scene load_steps=11 format=4 uid="uid://ec25jx2deodc"]
 
 [ext_resource type="Script" uid="uid://thu4rg7uqytk" path="res://scripts/core/Game.gd" id="1_1fp7r"]
 [ext_resource type="Texture2D" uid="uid://47p4cy0ufs86" path="res://RTSAssets/ground.png" id="2_6m72w"]
 [ext_resource type="Script" uid="uid://b5gh4c1egnp25" path="res://scripts/ui/camera.gd" id="2_v5dby"]
 [ext_resource type="PackedScene" uid="uid://dg8jjjtik1cqu" path="res://scenes/ui/UI_new.tscn" id="3_bq33v"]
+[ext_resource type="PackedScene" uid="uid://ccpmok7uimf12" path="res://scenes/units/Heavy.tscn" id="5_j2gmx"]
 [ext_resource type="PackedScene" uid="uid://d1ycj2660jnj2" path="res://scenes/buildings/Ressource.tscn" id="6_t5ptc"]
 [ext_resource type="PackedScene" uid="uid://c07cbcpoyy42e" path="res://scenes/buildings/robo_shop.tscn" id="7_bq33v"]
 [ext_resource type="PackedScene" uid="uid://boyahnaa6uv03" path="res://scenes/buildings/coinHouse.tscn" id="7_j2gmx"]
@@ -38,6 +39,10 @@ rendering_quadrant_size = 32
 
 [node name="Units" type="Node2D" parent="."]
 position = Vector2(117, 609)
+
+[node name="Heavy" parent="Units" instance=ExtResource("5_j2gmx")]
+position = Vector2(241, 292)
+scale = Vector2(2.3113313, 2.3113313)
 
 [node name="Units2" type="Node2D" parent="."]
 y_sort_enabled = true

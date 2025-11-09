@@ -38,7 +38,7 @@ var _atk_cd := 0.0              # Attack cooldown timer
 @export var selected = false
 @onready var box = get_node("Box")
 @onready var anim = get_node("AnimationPlayer")
-@onready var target_click = position
+@onready var target_click = global_position
 
 @onready var hp_bar := $HPBar if has_node("HPBar") else null
 
@@ -212,10 +212,11 @@ func _physics_process(delta):
 
 	# Use target_click for all movement (both player and AI controlled)
 	var move_target = target_click
-	var distance_to_target = position.distance_to(move_target)
+	var cur = global_position
+	var distance_to_target = cur.distance_to(move_target)
 
-	if distance_to_target > 10:
-		velocity = position.direction_to(move_target) * Speed
+	if distance_to_target > 10.0:
+		velocity = (move_target - cur).normalized() * Speed
 		move_and_slide()
 		if not anim.is_playing() or anim.current_animation != "Walk":
 			anim.play("Walk")
