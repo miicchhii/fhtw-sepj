@@ -1,7 +1,7 @@
 [gd_scene load_steps=5 format=3 uid="uid://c07cbcpoyy42e"]
 
 [ext_resource type="Script" uid="uid://bswau5dtog0k2" path="res://scripts/buildings/robo_shop.gd" id="1_fciky"]
-[ext_resource type="Texture2D" uid="uid://dd34kh8itbmb5" path="res://RTSAssets/robo_shop.png" id="1_pitd8"]
+[ext_resource type="Texture2D" uid="uid://buad5flxeqie2" path="res://RTSAssets/Shop_1.png" id="2_fciky"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_fciky"]
 size = Vector2(87, 94)
@@ -26,7 +26,7 @@ shape = SubResource("RectangleShape2D_fciky")
 [node name="RoboShop" type="Sprite2D" parent="."]
 position = Vector2(-2.000002, -43)
 scale = Vector2(0.09445325, 0.09445325)
-texture = ExtResource("1_pitd8")
+texture = ExtResource("2_fciky")
 
 [node name="Selected" type="Panel" parent="."]
 offset_left = -50.0

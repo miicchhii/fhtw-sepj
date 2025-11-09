@@ -1,7 +1,7 @@
 [gd_scene load_steps=7 format=3 uid="uid://d1ycj2660jnj2"]
 
 [ext_resource type="Script" uid="uid://u3884003p3cw" path="res://scripts/buildings/ressource.gd" id="1_ahymo"]
-[ext_resource type="Texture2D" uid="uid://c67fv2ppdbcqg" path="res://RTSAssets/ressource.png" id="2_e08dl"]
+[ext_resource type="Texture2D" uid="uid://bp8v7wp6lmagm" path="res://RTSAssets/Uranium_1.png" id="2_ahymo"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_1q7h5"]
 size = Vector2(8.5, 6.5)
@@ -19,11 +19,10 @@ bg_color = Color(0.859936, 0.499734, 0, 1)
 script = ExtResource("1_ahymo")
 
 [node name="Ressource" type="Sprite2D" parent="."]
-modulate = Color(0.4509804, 1, 0.4862745, 1)
-self_modulate = Color(0.8, 1, 0.8117647, 1)
+modulate = Color(1, 1, 0.5647059, 1)
 position = Vector2(0, -6)
-scale = Vector2(0.0375, 0.0375)
-texture = ExtResource("2_e08dl")
+scale = Vector2(0.021317791, 0.021317791)
+texture = ExtResource("2_ahymo")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 position = Vector2(0, -5)
