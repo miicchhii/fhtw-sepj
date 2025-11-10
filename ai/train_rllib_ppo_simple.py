@@ -206,16 +206,8 @@ if __name__ == "__main__":
             lambda_=GAE_LAMBDA,
             entropy_coeff=ENTROPY_COEFF,
         )
-        .rl_module(
-            model_config={
-                "fcnet_hiddens": FCNET_HIDDENS,
-                "fcnet_activation": FCNET_ACTIVATION,
-                "fcnet_weights_initializer": FCNET_WEIGHTS_INITIALIZER,
-                "fcnet_bias_initializer": FCNET_BIAS_INITIALIZER,
-            }
-        )
         .multi_agent(
-            policies=POLICY_NAMES,  # From central config
+            policies=POLICIES,  # Loaded from JSON via PolicyManager
             policy_mapping_fn=policy_mapping_fn,
             # Use POLICIES_TO_TRAIN variable to control which policies are trained
             # Policies not in this list will be frozen (inference only, no gradient updates)
