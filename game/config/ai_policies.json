@@ -1,4 +1,6 @@
 {
+  "ally_team_policy": "policy_aggressive_1",
+  "enemy_team_policy": "policy_defensive_1",
   "policies": {
 	"policy_aggressive_1": {
 	  "display_name": "Aggressive Alpha",
@@ -57,7 +59,7 @@
 	  "description": "Protects allied base with strong defensive positioning",
 	  "trainable": true,
 	  "network_config": {
-		"fcnet_hiddens": [96, 96, 96],
+		"fcnet_hiddens": [64, 64, 64],
 		"fcnet_activation": "tanh"
 	  },
 	  "reward_profile": {
@@ -83,7 +85,7 @@
 	  "description": "Alternative defensive strategy with maximum base protection",
 	  "trainable": true,
 	  "network_config": {
-		"fcnet_hiddens": [128, 128, 128],
+		"fcnet_hiddens": [128, 256, 128],
 		"fcnet_activation": "tanh"
 	  },
 	  "reward_profile": {

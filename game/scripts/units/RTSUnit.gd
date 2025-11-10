@@ -101,17 +101,42 @@ func _initialize_unit_stats() -> void:
 func _assign_policy() -> void:
 	"""
 	Assign initial AI policy based on faction.
+	Loads policy configuration from JSON to determine team assignments.
 
-	Policy distribution:
-	- Allies (is_enemy=false) → policy_LT50 (trainable)
-	- Enemies (is_enemy=true) → policy_GT50 (trainable)
+	Policy distribution (configurable in game/config/ai_policies.json):
+	- Allies (is_enemy=false) → policy_aggressive_1 (trainable)
+	- Enemies (is_enemy=true) → policy_defensive_1 (trainable)
 
 	This assignment can be changed at runtime via set_policy().
 	"""
+	# Load team policy assignments from JSON config
+	var config_path = "res://config/ai_policies.json"
+	var file = FileAccess.open(config_path, FileAccess.READ)
+
+	if not file:
+		push_error("Failed to load ai_policies.json for policy assignment")
+		policy_id = "policy_baseline"  # Fallback to baseline
+		return
+
+	var json = JSON.new()
+	var error = json.parse(file.get_as_text())
+	file.close()
+
+	if error != OK:
+		push_error("Failed to parse ai_policies.json: " + json.get_error_message())
+		policy_id = "policy_baseline"  # Fallback to baseline
+		return
+
+	var data = json.data
+
+	# Get team assignments from config, or use defaults
+	var ally_policy = data.get("ally_team_policy", "policy_aggressive_1")
+	var enemy_policy = data.get("enemy_team_policy", "policy_defensive_1")
+
 	if is_enemy:
-		policy_id = "policy_GT50"  # Enemy team policy
+		policy_id = enemy_policy
 	else:
-		policy_id = "policy_LT50"  # Ally team policy
+		policy_id = ally_policy
 
 func _apply_enemy_tint() -> void:
 	"""
