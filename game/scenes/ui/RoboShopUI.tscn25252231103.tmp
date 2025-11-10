@@ -1,0 +1,103 @@
+[gd_scene load_steps=6 format=3 uid="uid://c43mv32ro3mr8"]
+
+[ext_resource type="Script" uid="uid://ftu72uld05yx" path="res://scripts/ui/roboshop_ui.gd" id="1_83ofk"]
+[ext_resource type="Texture2D" uid="uid://38uypb2sdspf" path="res://RTSAssets/ShopUI/InfIcon.png" id="2_6p703"]
+[ext_resource type="Texture2D" uid="uid://bci58y2o4pbr2" path="res://RTSAssets/ShopUI/SniperIcon.png" id="3_6p703"]
+[ext_resource type="Texture2D" uid="uid://dlidrui6si1ok" path="res://RTSAssets/ShopUI/HeavyIcon.png" id="4_cgfor"]
+
+[sub_resource type="StyleBoxFlat" id="ShopPanelSB"]
+bg_color = Color(0.1, 0.1, 0.1, 1)
+script = ExtResource("1_83ofk")
+icon_infantry = ExtResource("2_6p703")
+icon_sniper = ExtResource("3_6p703")
+icon_heavy = ExtResource("4_cgfor")
+
+[node name="RoboShopUI" type="Control" groups=["Roboshop"]]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -222.0
+offset_top = -140.0
+offset_right = -1.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 1
+script = ExtResource("1_83ofk")
+icon_infantry = ExtResource("2_6p703")
+icon_sniper = ExtResource("3_6p703")
+icon_heavy = ExtResource("4_cgfor")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 0
+offset_right = 220.0
+offset_bottom = 140.0
+theme_override_styles/panel = SubResource("ShopPanelSB")
+
+[node name="HBox" type="HBoxContainer" parent="Panel"]
+layout_mode = 0
+offset_left = 6.0
+offset_top = 34.0
+offset_right = 203.0
+offset_bottom = 158.0
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="Infantry" type="VBoxContainer" parent="Panel/HBox"]
+layout_mode = 2
+
+[node name="InfantryLabel" type="Label" parent="Panel/HBox/Infantry"]
+layout_mode = 2
+text = "Infantry"
+horizontal_alignment = 1
+
+[node name="InfantryCost" type="Label" parent="Panel/HBox/Infantry"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+horizontal_alignment = 1
+
+[node name="InfantryBtn" type="TextureButton" parent="Panel/HBox/Infantry"]
+unique_name_in_owner = true
+layout_mode = 2
+stretch_mode = 4
+
+[node name="Sniper" type="VBoxContainer" parent="Panel/HBox"]
+layout_mode = 2
+
+[node name="SniperLabel" type="Label" parent="Panel/HBox/Sniper"]
+layout_mode = 2
+text = "Sniper"
+horizontal_alignment = 1
+
+[node name="SniperCost" type="Label" parent="Panel/HBox/Sniper"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+horizontal_alignment = 1
+
+[node name="SniperBtn" type="TextureButton" parent="Panel/HBox/Sniper"]
+unique_name_in_owner = true
+layout_mode = 2
+stretch_mode = 4
+
+[node name="Heavy" type="VBoxContainer" parent="Panel/HBox"]
+layout_mode = 2
+
+[node name="HeavyLabel" type="Label" parent="Panel/HBox/Heavy"]
+layout_mode = 2
+text = "Heavy"
+horizontal_alignment = 1
+
+[node name="HeavyCost" type="Label" parent="Panel/HBox/Heavy"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "—"
+horizontal_alignment = 1
+
+[node name="HeavyBtn" type="TextureButton" parent="Panel/HBox/Heavy"]
+unique_name_in_owner = true
+layout_mode = 2
+stretch_mode = 4

@@ -1,0 +1,81 @@
+[gd_scene load_steps=2 format=3 uid="uid://c43mv32ro3mr8"]
+
+[ext_resource type="Script" uid="uid://ftu72uld05yx" path="res://scripts/ui/roboshop_ui.gd" id="1_83ofk"]
+
+[node name="RoboShopUI" type="Control" groups=["Roboshop"]]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -140.0
+mouse_filter = 1
+script = ExtResource("1_83ofk")
+cost_infantry = null
+cost_sniper = null
+cost_heavy = null
+spawn_offset = null
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 0
+offset_right = 300.0
+offset_bottom = 140.0
+
+[node name="HBox" type="HBoxContainer" parent="Panel"]
+layout_mode = 0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = 292.0
+offset_bottom = 132.0
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="InfantryBtn" type="TextureButton" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+stretch_mode = 4
+
+[node name="InfantryLabel" type="Label" parent="."]
+layout_mode = 0
+text = "Infantry"
+horizontal_alignment = 1
+
+[node name="InfantryCost" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+text = "—"
+horizontal_alignment = 1
+
+[node name="SniperBtn" type="TextureButton" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+stretch_mode = 4
+
+[node name="SniperLabel" type="Label" parent="."]
+layout_mode = 0
+text = "Sniper"
+horizontal_alignment = 1
+
+[node name="SniperCost" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+text = "—"
+horizontal_alignment = 1
+
+[node name="HeavyBtn" type="TextureButton" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+stretch_mode = 4
+
+[node name="HeavyLabel" type="Label" parent="."]
+layout_mode = 0
+text = "Heavy"
+horizontal_alignment = 1
+
+[node name="HeavyCost" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+text = "—"
+horizontal_alignment = 1
