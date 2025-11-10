@@ -109,7 +109,7 @@
 	"policy_baseline": {
 	  "display_name": "Baseline",
 	  "description": "Balanced baseline policy for comparison",
-	  "trainable": false,
+	  "trainable": true,
 	  "network_config": {
 		"fcnet_hiddens": [128, 256, 128],
 		"fcnet_activation": "tanh"
@@ -124,7 +124,7 @@
 		"team_victory": 50.0,
 		"team_defeat": -25.0,
 		"proximity_to_enemy_base_multiplier": 1.5,
-		"proximity_to_ally_base_multiplier": 0.0,
+		"proximity_to_ally_base_multiplier": 0.5,
 		"alive_per_step": 0.01,
 		"movement_continue_straight": 0.5,
 		"movement_reverse_direction": -1.0,

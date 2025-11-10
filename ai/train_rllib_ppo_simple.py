@@ -231,7 +231,8 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     # Checkpoint loading configuration
     # Priority: latest numbered checkpoint > checkpoint_3policy > train from scratch
-    skip_checkpoint_loading = False  # Set to True to train from scratch
+    # IMPORTANT: Set to True when policy configuration changes (policy names/count)
+    skip_checkpoint_loading = True  # Set to False to load from checkpoint (policies must match!)
 
     # Determine which checkpoint to load
     checkpoint_to_load = None
@@ -246,6 +247,8 @@ if __name__ == "__main__":
                 print(f"No training checkpoints found, loading baseline: {checkpoint_3policy}")
             else:
                 print("No checkpoints found, training from scratch")
+    else:
+        print("Checkpoint loading disabled - training from scratch with new policy configuration")
 
     # Build algorithm
     print("Building algorithm...")
