@@ -379,42 +379,20 @@ if __name__ == "__main__":
 
             if learners:
                 print("  Learner metrics found")
-                print(f"  Available policies in learners: {list(learners.keys())}")
 
-                # Dynamically determine labels based on POLICIES_TO_TRAIN configuration
-                # The structure might be nested differently
-                if "policy_LT50" in learners:
-                    lt50_stats = learners["policy_LT50"]
-                    lt50_label = "LT50 TRAINABLE" if "policy_LT50" in POLICIES_TO_TRAIN else "LT50 FROZEN"
-                    print(f"    [{lt50_label}] Policy loss: {lt50_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [{lt50_label}] VF loss: {lt50_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [{lt50_label}] Entropy: {lt50_stats.get('entropy', 'N/A')}")
-                    if "policy_LT50" not in POLICIES_TO_TRAIN:
-                        print(f"    WARNING: policy_LT50 appears in learners but is configured as FROZEN!")
+                # Display metrics for each policy dynamically
+                for policy_id in policy_manager.get_policy_ids():
+                    if policy_id in learners:
+                        stats = learners[policy_id]
+                        trainable = policy_manager.is_trainable(policy_id)
+                        display_name = policy_manager.get_display_name(policy_id)
+                        label = f"{display_name} ({'TRAIN' if trainable else 'FROZEN'})"
 
-                if "policy_frontline" in learners:
-                    frontline_stats = learners["policy_frontline"]
-                    frontline_label = "FRONTLINE TRAINABLE" if "policy_frontline" in POLICIES_TO_TRAIN else "FRONTLINE FROZEN"
-                    print(f"    [{frontline_label}] Policy loss: {frontline_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [{frontline_label}] VF loss: {frontline_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [{frontline_label}] Entropy: {frontline_stats.get('entropy', 'N/A')}")
-                    if "policy_frontline" not in POLICIES_TO_TRAIN:
-                        print(f"    WARNING: policy_frontline appears in learners but is configured as FROZEN!")
-
-                if "policy_GT50" in learners:
-                    gt50_stats = learners["policy_GT50"]
-                    gt50_label = "GT50 TRAINABLE" if "policy_GT50" in POLICIES_TO_TRAIN else "GT50 FROZEN"
-                    print(f"    [{gt50_label}] Policy loss: {gt50_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [{gt50_label}] VF loss: {gt50_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [{gt50_label}] Entropy: {gt50_stats.get('entropy', 'N/A')}")
-                    if "policy_GT50" not in POLICIES_TO_TRAIN:
-                        print(f"    WARNING: policy_GT50 appears in learners but is configured as FROZEN!")
-
-                if "default_policy" in learners:
-                    default_stats = learners["default_policy"]
-                    print(f"    [LEGACY] Policy loss: {default_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [LEGACY] VF loss: {default_stats.get('vf_loss', 'N/A')}")
-                    print(f"    Entropy: {default_stats.get('entropy', 'N/A')}")
+                        print(f"    [{label}]")
+                        print(f"      Policy loss: {stats.get('policy_loss', 'N/A')}")
+                        print(f"      VF loss: {stats.get('vf_loss', 'N/A')}")
+                        print(f"      Entropy: {stats.get('entropy', 'N/A')}")
+                        print(f"      Mean KL: {stats.get('mean_kl_loss', 'N/A')}")
 
             # Save checkpoint periodically
             if (i + 1) % 1 == 0:
