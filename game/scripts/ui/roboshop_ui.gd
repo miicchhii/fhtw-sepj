@@ -13,6 +13,11 @@ extends Control
 
 @export var spawn_offset: Vector2 = Vector2(48, 0)
 
+@export var spawn_radius_min: float = 32.0
+@export var spawn_radius_max: float = 96.0
+var _rng: RandomNumberGenerator
+
+
 # ---------------- Internals ----------------
 var btn_inf: TextureButton
 var btn_snp: TextureButton
@@ -27,6 +32,9 @@ func _ready() -> void:
 	_connect_signals()
 	_update_cost_labels()
 	_assign_icons()
+	_rng = RandomNumberGenerator.new()
+	_rng.randomize()
+
 
 func _process(_dt: float) -> void:
 	if btn_inf: btn_inf.disabled = Global.Metal < cost_infantry
@@ -116,6 +124,11 @@ func _style_buttons() -> void:
 	normal_box.border_color = Color(0.85, 0.85, 0.10, 1.0)
 	normal_box.set_border_width_all(2)
 	normal_box.set_corner_radius_all(6)
+	
+	normal_box.content_margin_left = 2
+	normal_box.content_margin_top = 2
+	normal_box.content_margin_right = 2
+	normal_box.content_margin_bottom = 2
 
 	var hover_box := normal_box.duplicate() as StyleBoxFlat
 	hover_box.border_color = Color(1.0, 1.0, 0.30, 1.0)
@@ -124,12 +137,23 @@ func _style_buttons() -> void:
 	var pressed_box := normal_box.duplicate() as StyleBoxFlat
 	pressed_box.border_color = Color(1.0, 0.9, 0.2, 1.0)
 	pressed_box.bg_color = Color(0.18, 0.18, 0.18, 0.92)
+	
+	normal_box.border_color = Color(0.8, 0.8, 0.1, 1)
+	hover_box.border_color  = Color(1, 1, 0.4, 1)
+	pressed_box.border_color = Color(1, 0.7, 0.2, 1)
 
 	for b in [btn_inf, btn_snp, btn_hvy]:
+		b.mouse_entered.connect(func(): b.scale = Vector2(1.1, 1.1))
+		b.mouse_exited.connect(func(): b.scale = Vector2(1.0, 1.0))
+		b.pressed.connect(func(): b.modulate = Color(0.8, 0.8, 0.8))
+		b.button_up.connect(func(): b.modulate = Color(1, 1, 1))
 		b.add_theme_stylebox_override("normal", normal_box)
 		b.add_theme_stylebox_override("hover", hover_box)
 		b.add_theme_stylebox_override("pressed", pressed_box)
 		b.add_theme_stylebox_override("focus", hover_box)
+
+
+	
 
 # ---------------- Connections ----------------
 func _connect_signals() -> void:
@@ -178,7 +202,36 @@ func _buy(unit_type: int, cost: int) -> void:
 
 
 func _get_spawn_position() -> Vector2:
+	# find first Node2D in group 'Roboshop'
+	var center: Vector2 = Vector2.ZERO
 	for n in get_tree().get_nodes_in_group("Roboshop"):
 		if n is Node2D:
-			return (n as Node2D).global_position + spawn_offset
-	return get_viewport().get_visible_rect().size / 2.0
+			center = (n as Node2D).global_position
+			break
+	if center == Vector2.ZERO:
+		# fallback: center of screen
+		return get_viewport().get_visible_rect().size / 2.0
+
+	# try a few random spots in an annulus around the shop
+	var min_r: float = spawn_radius_min
+	var max_r: float = max(spawn_radius_max, min_r + 1.0)
+	var min_separation: float = 24.0
+
+	for _i in 8:
+		var angle := _rng.randf_range(-PI, PI)
+		var radius := _rng.randf_range(min_r, max_r)
+		var candidate := center + Vector2.from_angle(angle) * radius
+
+		# simple separation check vs existing friendly units
+		var ok := true
+		var units_root := get_tree().get_root().get_node_or_null("World/Units2")
+		if units_root:
+			for u in units_root.get_children():
+				if u is Node2D and (u as Node2D).global_position.distance_to(candidate) < min_separation:
+					ok = false
+					break
+		if ok:
+			return candidate
+
+	# fallback if all attempts failed
+	return center + Vector2(spawn_radius_min, 0)
