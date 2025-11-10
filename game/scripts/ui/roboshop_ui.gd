@@ -1,9 +1,11 @@
 extends Control
 
 # ---------------- Config ----------------
-@export var cost_infantry: int = 50
-@export var cost_sniper: int = 100
-@export var cost_heavy: int = 150
+@export var cost_infantry: int = 30
+@export var cost_sniper:   int = 40
+@export var cost_heavy:    int = 70
+@export var uranium_heavy: int = 1
+
 
 @export var icon_infantry: Texture2D
 @export var icon_sniper: Texture2D
@@ -29,7 +31,8 @@ func _ready() -> void:
 func _process(_dt: float) -> void:
 	if btn_inf: btn_inf.disabled = Global.Metal < cost_infantry
 	if btn_snp: btn_snp.disabled = Global.Metal < cost_sniper
-	if btn_hvy: btn_hvy.disabled = Global.Metal < cost_heavy
+	if btn_hvy:
+		btn_hvy.disabled = (Global.Metal < cost_heavy) or (Global.Uranium < uranium_heavy)
 
 # ---------------- UI Construction ----------------
 func _build_ui() -> void:
@@ -54,6 +57,15 @@ func _build_ui() -> void:
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 8)
 	panel.add_child(h)
+	
+	var legend := Label.new()
+	legend.text = "M = Metal  •  U = Uranium"
+	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	legend.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	legend.position = Vector2(8, 124)  # below the HBox inside the panel
+	legend.size = Vector2(224, 16)
+	panel.add_child(legend)
+
 
 	# build the 3 unit cards
 	var inf = _make_card("Infantry")
@@ -126,9 +138,9 @@ func _connect_signals() -> void:
 	btn_hvy.pressed.connect(_on_buy_heavy)
 
 func _update_cost_labels() -> void:
-	lbl_inf_cost.text = str(cost_infantry)
-	lbl_snp_cost.text = str(cost_sniper)
-	lbl_hvy_cost.text = str(cost_heavy)
+	lbl_inf_cost.text = "%d M" % cost_infantry
+	lbl_snp_cost.text = "%d M" % cost_sniper
+	lbl_hvy_cost.text = "%d M + %d U" % [cost_heavy, uranium_heavy]
 
 func _assign_icons() -> void:
 	if icon_infantry: btn_inf.texture_normal = icon_infantry
@@ -141,8 +153,14 @@ func _on_buy_sniper()   -> void: _buy(Global.UnitType.SNIPER, cost_sniper)
 func _on_buy_heavy()    -> void: _buy(Global.UnitType.HEAVY,  cost_heavy)
 
 func _buy(unit_type: int, cost: int) -> void:
+	var need_u := (unit_type == Global.UnitType.HEAVY)
+	var u_cost := uranium_heavy if need_u else 0
+
 	if Global.Metal < cost:
 		print("Shop: Not enough Metal (need %d, have %d)" % [cost, Global.Metal])
+		return
+	if need_u and Global.Uranium < u_cost:
+		print("Shop: Not enough Uranium (need %d, have %d)" % [u_cost, Global.Uranium])
 		return
 
 	var pos := _get_spawn_position()
@@ -151,8 +169,13 @@ func _buy(unit_type: int, cost: int) -> void:
 		return
 
 	Global.Metal -= cost
-	print("Shop: Spent %d Metal, new balance %d" % [cost, Global.Metal])
+	if need_u:
+		Global.Uranium -= u_cost
+	print("Shop: Spent %d M%s  |  Metal=%d, Uranium=%d" %
+	[cost, (" + %d U" % u_cost) if need_u else "", Global.Metal, Global.Uranium])
+	
 	Global.spawnUnit(pos, false, unit_type)
+
 
 func _get_spawn_position() -> Vector2:
 	for n in get_tree().get_nodes_in_group("Roboshop"):
