@@ -40,6 +40,7 @@ const TOTAL_UNITS: int = NUM_ALLY_UNITS + NUM_ENEMY_UNITS  # 100 total units
 
 # Unit composition (for spawn logic)
 const SNIPER_SPAWN_INTERVAL: int = 3  # Spawn 1 sniper every N units (33% snipers, 67% infantry)
+const HEAVY_SPAWN_INTERVAL: int = 50  # Spawn 1 heavy unit every N units
 
 # =============================================================================
 # SPAWN POSITIONING
@@ -80,7 +81,7 @@ const AI_ACTION_STEPSIZE: float = 200.0  # Maximum movement distance per AI step
 
 # Combat rewards
 const REWARD_DAMAGE_TO_UNIT: float = 0.2    # Reward per damage point to enemy units
-const REWARD_DAMAGE_TO_BASE: float = 1.0    # Reward per damage point to enemy base
+
 const REWARD_UNIT_KILL: float = 15.0        # Reward for killing an enemy unit
 const REWARD_BASE_KILL: float = 200.0       # Reward for destroying enemy base
 const PENALTY_DAMAGE_RECEIVED: float = 0.1  # Penalty per damage point received
@@ -101,10 +102,11 @@ const REWARD_CONTINUE_STRAIGHT: float = 0.5    # Reward for maintaining directio
 const PENALTY_REVERSE_DIRECTION: float = 1.0   # Penalty for reversing direction
 
 # Base damage penalty
+const REWARD_DAMAGE_TO_BASE: float = 1.0    # Reward per damage point to enemy base
 const PENALTY_BASE_DAMAGE_PER_UNIT: float = 0.5  # Penalty per damage to your base (divided among units)
 
 # Tactical spacing (anti-clustering)
-const REWARD_TACTICAL_SPACING: float = 0.1        # Penalty per nearby ally
+const REWARD_TACTICAL_SPACING: float = 1        # Penalty per nearby ally
 const TACTICAL_SPACING_THRESHOLD: float = 100.0   # Minimum desired spacing (pixels)
 
 # =============================================================================
