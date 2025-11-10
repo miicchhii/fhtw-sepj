@@ -176,6 +176,24 @@ class PolicyManager:
 
         return self.policies[policy_id]
 
+    def get_network_config(self, policy_id: str) -> Dict:
+        """
+        Get neural network configuration for a policy.
+
+        Args:
+            policy_id: ID of the policy
+
+        Returns:
+            Dictionary with network config (fcnet_hiddens, fcnet_activation, etc.)
+
+        Raises:
+            KeyError: If policy_id doesn't exist
+        """
+        if policy_id not in self.policies:
+            raise KeyError(f"Policy not found: {policy_id}")
+
+        return self.policies[policy_id].get("network_config", {})
+
     def print_summary(self) -> None:
         """Print a summary of all configured policies"""
         print(f"\n=== Policy Configuration Summary ===")

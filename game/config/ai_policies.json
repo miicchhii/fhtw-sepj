@@ -4,6 +4,10 @@
       "display_name": "Aggressive Alpha",
       "description": "Rushes enemy base aggressively with high damage focus",
       "trainable": true,
+      "network_config": {
+        "fcnet_hiddens": [64, 64, 64],
+        "fcnet_activation": "tanh"
+      },
       "reward_profile": {
         "damage_to_unit": 0.2,
         "damage_to_base": 2.0,
@@ -26,6 +30,10 @@
       "display_name": "Aggressive Beta",
       "description": "Alternative aggressive strategy emphasizing unit kills",
       "trainable": true,
+      "network_config": {
+        "fcnet_hiddens": [128, 256, 128],
+        "fcnet_activation": "tanh"
+      },
       "reward_profile": {
         "damage_to_unit": 0.3,
         "damage_to_base": 1.5,
@@ -48,6 +56,10 @@
       "display_name": "Defensive Alpha",
       "description": "Protects allied base with strong defensive positioning",
       "trainable": true,
+      "network_config": {
+        "fcnet_hiddens": [96, 96, 96],
+        "fcnet_activation": "tanh"
+      },
       "reward_profile": {
         "damage_to_unit": 0.2,
         "damage_to_base": 0.8,
@@ -70,6 +82,10 @@
       "display_name": "Defensive Beta",
       "description": "Alternative defensive strategy with maximum base protection",
       "trainable": true,
+      "network_config": {
+        "fcnet_hiddens": [128, 128, 128],
+        "fcnet_activation": "tanh"
+      },
       "reward_profile": {
         "damage_to_unit": 0.15,
         "damage_to_base": 0.5,
@@ -92,6 +108,10 @@
       "display_name": "Baseline",
       "description": "Balanced baseline policy for comparison",
       "trainable": false,
+      "network_config": {
+        "fcnet_hiddens": [128, 256, 128],
+        "fcnet_activation": "tanh"
+      },
       "reward_profile": {
         "damage_to_unit": 0.2,
         "damage_to_base": 1.0,
