@@ -113,17 +113,9 @@ DEFAULT_TIMEOUT = 5.0  # Socket timeout in seconds
 # ============================================================================
 # POLICY CONFIGURATION
 # ============================================================================
-# Define the policies used in multi-agent training
-# Each policy has a name and can be configured as trainable or frozen
-
-POLICY_NAMES = {
-    "policy_LT50",      # Units u1-u49 (49 units)
-    "policy_GT50",      # Units u50-u75 (26 units)
-    "policy_frontline", # Units u76-u100 (25 units)
-}
-
-# Default trainable policies (can be overridden in training script)
-DEFAULT_TRAINABLE_POLICIES = ["policy_LT50", "policy_GT50", "policy_frontline"]
+# Policies are now loaded dynamically from game/config/ai_policies.json
+# See PolicyManager in ai/policy_manager.py for policy loading logic
+# This eliminates the need for hardcoded policy names here
 
 # ============================================================================
 # TRAINING HYPERPARAMETERS
@@ -132,7 +124,7 @@ DEFAULT_TRAINABLE_POLICIES = ["policy_LT50", "policy_GT50", "policy_frontline"]
 
 # Learning rate - REDUCED from 3e-4 to 1e-4 for better convergence
 # High entropy after 10+ hours suggests learning rate may be too high
-LEARNING_RATE = 3e-5
+LEARNING_RATE = 3e-4
 
 # Entropy coefficient - controls exploration vs exploitation
 # Lower values encourage more deterministic policies (less random exploration)
