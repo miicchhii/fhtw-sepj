@@ -17,12 +17,9 @@ const STAT_KEYS := [
 	["AI Model"],  # Special handling for policy_id
 ]
 
-# Available AI policies (keep in sync with ai/rts_config.py)
-const AVAILABLE_POLICIES := [
-	"policy_LT50",
-	"policy_GT50",
-	"policy_frontline",
-]
+# Available AI policies (loaded dynamically from JSON)
+var available_policies: Array = []
+var policy_display_names: Dictionary = {}
 
 
 var _icon_container: HBoxContainer  # Container for one or more icons
@@ -35,6 +32,7 @@ var _refresh_accum: float = 0.0
 
 
 func _ready() -> void:
+	load_available_policies()
 	_build_ui()
 	_try_connect_global_signal()
 	if Global.has_signal("selected_unit_changed"):
@@ -42,6 +40,35 @@ func _ready() -> void:
 			_selected_cached = u
 			_update(u)
 		)
+
+func load_available_policies() -> void:
+	"""Load available policies from JSON configuration"""
+	var config_path = "res://config/ai_policies.json"
+	var file = FileAccess.open(config_path, FileAccess.READ)
+
+	if not file:
+		push_error("Failed to load ai_policies.json")
+		return
+
+	var json = JSON.new()
+	var error = json.parse(file.get_as_text())
+	file.close()
+
+	if error != OK:
+		push_error("Failed to parse ai_policies.json: " + json.get_error_message())
+		return
+
+	var data = json.data
+	if not data.has("policies"):
+		push_error("Invalid ai_policies.json: missing 'policies' key")
+		return
+
+	var policies = data["policies"]
+	for policy_id in policies.keys():
+		available_policies.append(policy_id)
+		policy_display_names[policy_id] = policies[policy_id].get("display_name", policy_id)
+
+	print("UnitInfoUI: Loaded ", available_policies.size(), " policies")
 
 func _process(dt: float) -> void:
 	var raw = Global.get("SelectedUnit")  # may be null or freed
@@ -168,8 +195,9 @@ func _build_ui() -> void:
 	root.add_child(policy_label)
 
 	_policy_dropdown = OptionButton.new()
-	for policy_id in AVAILABLE_POLICIES:
-		_policy_dropdown.add_item(_format_policy_name(policy_id))
+	for policy_id in available_policies:
+		var display_name = policy_display_names.get(policy_id, policy_id)
+		_policy_dropdown.add_item(display_name)
 	_policy_dropdown.item_selected.connect(_on_policy_selected)
 	root.add_child(_policy_dropdown)
 
@@ -344,10 +372,10 @@ func _format_policy_name(policy_id: String) -> String:
 
 func _on_policy_selected(index: int) -> void:
 	"""Handle policy selection from dropdown - applies to ALL selected units"""
-	if index < 0 or index >= AVAILABLE_POLICIES.size():
+	if index < 0 or index >= available_policies.size():
 		return
 
-	var selected_policy = AVAILABLE_POLICIES[index]
+	var selected_policy = available_policies[index]
 	var units = get_all_selected_units()
 
 	if units.is_empty():
