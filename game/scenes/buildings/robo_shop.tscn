@@ -15,7 +15,7 @@ border_width_bottom = 1
 border_color = Color(0.43137255, 0.8666667, 1, 1)
 border_blend = true
 
-[node name="robo_shop" type="StaticBody2D"]
+[node name="robo_shop" type="StaticBody2D" groups=["Roboshop"]]
 input_pickable = true
 script = ExtResource("1_fciky")
 
