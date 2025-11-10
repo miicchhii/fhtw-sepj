@@ -1,7 +1,7 @@
 [gd_scene load_steps=6 format=3 uid="uid://boyahnaa6uv03"]
 
-[ext_resource type="Texture2D" uid="uid://bo7w8vj4tvfnj" path="res://RTSAssets/bank.png" id="1_8c8mn"]
 [ext_resource type="Script" uid="uid://dqi1cem4s3up2" path="res://scripts/buildings/coin_house.gd" id="1_xorlt"]
+[ext_resource type="Texture2D" uid="uid://cxmt60i4dfcph" path="res://RTSAssets/MetalGen_1.png" id="2_xorlt"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_4opse"]
 size = Vector2(20, 16)
@@ -36,7 +36,7 @@ wait_time = 0.1
 
 [node name="Bank" type="Sprite2D" parent="."]
 position = Vector2(1, -9)
-scale = Vector2(0.172671, 0.172671)
-texture = ExtResource("1_8c8mn")
+scale = Vector2(0.021063915, 0.021063915)
+texture = ExtResource("2_xorlt")
 
 [connection signal="timeout" from="Timer" to="." method="_on_timer_timeout"]

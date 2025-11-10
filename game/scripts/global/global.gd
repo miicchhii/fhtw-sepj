@@ -1,8 +1,18 @@
 extends Node
 
-var Steel = 0
-var Coin = 0
+var Uranium = 0
+var Metal = 0
 var next_unit_id = 1
+
+signal selected_unit_changed(u: Node)
+
+var SelectedUnit: Node = null
+
+func set_selected_unit(u: Node) -> void:
+	if SelectedUnit == u:
+		return
+	SelectedUnit = u
+	selected_unit_changed.emit(u)
 
 func get_next_unit_id() -> String:
 	var id = "u" + str(next_unit_id)
@@ -11,7 +21,8 @@ func get_next_unit_id() -> String:
 
 enum UnitType {
 	INFANTRY,
-	SNIPER
+	SNIPER,
+	HEAVY
 }
 
 func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFANTRY):
@@ -25,6 +36,9 @@ func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFAN
 		UnitType.SNIPER:
 			unit_scene = preload("res://scenes/units/sniper.tscn")
 			unit_type_name = "Sniper"
+		UnitType.HEAVY:
+			unit_scene = preload("res://scenes/units/Heavy.tscn")
+			unit_type_name = "Heavy"
 
 	var unit = unit_scene.instantiate()
 

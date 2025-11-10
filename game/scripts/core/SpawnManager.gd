@@ -149,20 +149,28 @@ func spawn_all_units(swap_spawn_sides: bool) -> void:
 	var spawn_side_label = "normal" if not swap_spawn_sides else "SWAPPED"
 	print("SpawnManager: Spawning units (", spawn_side_label, "): allies at (", ally_x, ", ", ally_y, "), enemies at (", enemy_x, ", ", enemy_y, ")")
 
-	# Create ally units with sequential IDs (mix of infantry and snipers)
+	# Create ally units with sequential IDs (mix of infantry, snipers, and heavy units)
 	print("SpawnManager: Creating ", num_ally_units, " ally units...")
 	for i in range(num_ally_units):
 		var pos = Vector2(ally_x + (i % spawn_rows) * spawn_spacing_x, ally_y + (i / spawn_rows) * spawn_spacing_y)
-		# Spawn snipers based on GameConfig interval
-		var unit_type = Global.UnitType.SNIPER if i % GameConfig.SNIPER_SPAWN_INTERVAL == 0 else Global.UnitType.INFANTRY
+		# Spawn heavy units every HEAVY_SPAWN_INTERVAL, snipers every SNIPER_SPAWN_INTERVAL, otherwise infantry
+		var unit_type = Global.UnitType.INFANTRY
+		if i % GameConfig.HEAVY_SPAWN_INTERVAL == 0:
+			unit_type = Global.UnitType.HEAVY
+		elif i % GameConfig.SNIPER_SPAWN_INTERVAL == 0:
+			unit_type = Global.UnitType.SNIPER
 		Global.spawnUnit(pos, false, unit_type)
 
-	# Create enemy units with sequential IDs (mix of infantry and snipers)
+	# Create enemy units with sequential IDs (mix of infantry, snipers, and heavy units)
 	print("SpawnManager: Creating ", num_enemy_units, " enemy units...")
 	for i in range(num_enemy_units):
 		var pos = Vector2(enemy_x + (i % spawn_rows) * spawn_spacing_x, enemy_y + (i / spawn_rows) * spawn_spacing_y)
-		# Spawn snipers based on GameConfig interval
-		var unit_type = Global.UnitType.SNIPER if i % GameConfig.SNIPER_SPAWN_INTERVAL == 0 else Global.UnitType.INFANTRY
+		# Spawn heavy units every HEAVY_SPAWN_INTERVAL, snipers every SNIPER_SPAWN_INTERVAL, otherwise infantry
+		var unit_type = Global.UnitType.INFANTRY
+		if i % GameConfig.HEAVY_SPAWN_INTERVAL == 0:
+			unit_type = Global.UnitType.HEAVY
+		elif i % GameConfig.SNIPER_SPAWN_INTERVAL == 0:
+			unit_type = Global.UnitType.SNIPER
 		Global.spawnUnit(pos, true, unit_type)
 
 	print("SpawnManager: All units spawned successfully")

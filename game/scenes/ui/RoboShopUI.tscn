@@ -1,0 +1,14 @@
+[gd_scene load_steps=5 format=3 uid="uid://c5dvs4fwlgx7j"]
+
+[ext_resource type="Script" uid="uid://ftu72uld05yx" path="res://scripts/ui/roboshop_ui.gd" id="S_UI"]
+[ext_resource type="Texture2D" uid="uid://dlidrui6si1ok" path="res://RTSAssets/ShopUI/HeavyIcon.png" id="T_HVY"]
+[ext_resource type="Texture2D" uid="uid://38uypb2sdspf" path="res://RTSAssets/ShopUI/InfIcon.png" id="T_INF"]
+[ext_resource type="Texture2D" uid="uid://bci58y2o4pbr2" path="res://RTSAssets/ShopUI/SniperIcon.png" id="T_SNP"]
+
+[node name="RoboShopUi" type="Control"]
+layout_mode = 3
+anchors_preset = 0
+script = ExtResource("S_UI")
+icon_infantry = ExtResource("T_INF")
+icon_sniper = ExtResource("T_SNP")
+icon_heavy = ExtResource("T_HVY")

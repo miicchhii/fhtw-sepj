@@ -46,12 +46,12 @@ y_sort_enabled = true
 y_sort_enabled = true
 
 [node name="Ressource" parent="Objects" instance=ExtResource("6_t5ptc")]
-position = Vector2(1278.0001, 294)
+position = Vector2(450.99988, 142.99998)
 scale = Vector2(4.92, 4.92)
 
 [node name="coinHouse" parent="Objects" instance=ExtResource("7_j2gmx")]
-position = Vector2(237.00003, 1245.0001)
-scale = Vector2(5.08, 5.08)
+position = Vector2(218.99998, 1291)
+scale = Vector2(8.713287, 8.713287)
 
 [node name="Houses" type="Node2D" parent="."]
 y_sort_enabled = true

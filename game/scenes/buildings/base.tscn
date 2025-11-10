@@ -1,26 +1,29 @@
 [gd_scene load_steps=4 format=3 uid="uid://crfjla12xop6i"]
 
-[ext_resource type="Script" path="res://scripts/buildings/Base.gd" id="1_base_script"]
-[ext_resource type="Texture2D" uid="uid://dsami4hjjjf56" path="res://RTSAssets/house.png" id="1_uv5ks"]
+[ext_resource type="Script" uid="uid://dk8k3prejg8l6" path="res://scripts/buildings/Base.gd" id="1_base_script"]
+[ext_resource type="Texture2D" uid="uid://d3g7mkiryqka6" path="res://RTSAssets/Base_1.png" id="2_o6as2"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_so3h3"]
-size = Vector2(32, 29)
+size = Vector2(160, 127)
 
 [node name="Base" type="StaticBody2D"]
 script = ExtResource("1_base_script")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2(0, 1.5)
+position = Vector2(-2, 25)
 shape = SubResource("RectangleShape2D_so3h3")
 
 [node name="Sprite2D" type="Sprite2D" parent="."]
-texture = ExtResource("1_uv5ks")
+position = Vector2(-7.6293945e-06, 1)
+scale = Vector2(0.32792178, 0.32792178)
+texture = ExtResource("2_o6as2")
 
 [node name="HPBar" type="ProgressBar" parent="."]
-offset_left = -20.0
-offset_top = -25.0
-offset_right = 20.0
-offset_bottom = -20.0
+offset_left = -95.99999
+offset_top = -257.0
+offset_right = -55.999992
+offset_bottom = -252.0
+scale = Vector2(4.892597, 4.892597)
 max_value = 1000.0
 value = 1000.0
 show_percentage = false

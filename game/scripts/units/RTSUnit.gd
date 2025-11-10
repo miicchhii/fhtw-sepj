@@ -38,7 +38,7 @@ var _atk_cd := 0.0              # Attack cooldown timer
 @export var selected = false
 @onready var box = get_node("Box")
 @onready var anim = get_node("AnimationPlayer")
-@onready var target_click = position
+@onready var target_click = global_position
 
 @onready var hp_bar := $HPBar if has_node("HPBar") else null
 
@@ -150,6 +150,10 @@ func step(_delta: float) -> void:
 func set_selected(value):
 	selected = value
 	box.visible = value
+	if (value == true):
+		Global.set_selected_unit(self)
+	if (value == false) && (Global.SelectedUnit == self):
+		Global.set_selected_unit(null)
 	queue_redraw()  # Redraw when selection changes
 
 func set_poi_positions(pois: Array):
@@ -212,10 +216,11 @@ func _physics_process(delta):
 
 	# Use target_click for all movement (both player and AI controlled)
 	var move_target = target_click
-	var distance_to_target = position.distance_to(move_target)
+	var cur = global_position
+	var distance_to_target = cur.distance_to(move_target)
 
-	if distance_to_target > 10:
-		velocity = position.direction_to(move_target) * Speed
+	if distance_to_target > 10.0:
+		velocity = (move_target - cur).normalized() * Speed
 		move_and_slide()
 		if not anim.is_playing() or anim.current_animation != "Walk":
 			anim.play("Walk")
@@ -255,7 +260,7 @@ func _physics_process(delta):
 							if attack_target.hp <= 0:
 								kills_this_step += 1
 					if has_node("AnimationPlayer"):
-						$AnimationPlayer.play("Attack") # ok if missing
+						anim.play("Attack") # ok if missing
 					_atk_cd = attack_cooldown
 	
 		# --- Enemy units: attack ONLY when an ally is already in range ---
@@ -287,7 +292,7 @@ func _physics_process(delta):
 						if attack_target.hp <= 0:
 							kills_this_step += 1
 					if has_node("AnimationPlayer"):
-						$AnimationPlayer.play("Attack")
+						anim.play("Attack")
 					_atk_cd = attack_cooldown
 
 		
@@ -300,7 +305,7 @@ func apply_damage(amount: int, attacker: RTSUnit = null) -> void:
 	damage_received_this_step += actual_damage
 
 	if has_node("AnimationPlayer"):
-		$AnimationPlayer.play("Attack")
+		anim.play("Attack")
 	_update_hp_bar()
 	if hp == 0:
 		died_this_step = true
