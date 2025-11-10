@@ -45,36 +45,62 @@ func _process(_dt: float) -> void:
 # ---------------- UI Construction ----------------
 func _build_ui() -> void:
 	anchor_left = 1.0; anchor_top = 1.0; anchor_right = 1.0; anchor_bottom = 1.0
-	offset_left = -240; offset_top = -140; offset_right = -8; offset_bottom = -8
+	offset_left = -240; offset_top = -173; offset_right = -8; offset_bottom = -8
 	mouse_filter = Control.MOUSE_FILTER_PASS
 
 	var panel := Panel.new()
 	panel.name = "Panel"
 	panel.offset_right = 232
-	panel.offset_bottom = 132
+	panel.offset_bottom = 170
 	add_child(panel)
 
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.1, 0.1, 0.1, 0.88)
 	sb.set_corner_radius_all(8)
 	panel.add_theme_stylebox_override("panel", sb)
+	
+	# container that pads the panel and stacks content vertically
+	var v := VBoxContainer.new()
+	v.anchor_right = 1.0
+	v.anchor_bottom = 1.0
+	v.offset_left = 8
+	v.offset_top = 8
+	v.offset_right = -8
+	v.offset_bottom = -8
+	v.add_theme_constant_override("separation", 6)
+	panel.add_child(v)
+	
+	# --- Title label at the top ---
+	var title := Label.new()
+	title.text = "Construction Shop"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	title.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.6))
+	title.add_theme_constant_override("outline_size", 2)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(title)
 
+	
 	var h := HBoxContainer.new()
 	h.name = "HBox"
-	h.offset_left = 8; h.offset_top = 8; h.offset_right = 224; h.offset_bottom = 124
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
 	h.add_theme_constant_override("separation", 8)
-	panel.add_child(h)
+	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	v.add_child(h)
+	
 	
 	var legend := Label.new()
 	legend.text = "M = Metal  •  U = Uranium"
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	legend.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-	legend.position = Vector2(8, 124)  # below the HBox inside the panel
-	legend.size = Vector2(224, 16)
-	panel.add_child(legend)
+	legend.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(legend)
+	panel.custom_minimum_size = Vector2(232, 156)  # was ~132 tall; this adds room for the legend
 
-
+	
+	
+	
 	# build the 3 unit cards
 	var inf = _make_card("Infantry")
 	var snp = _make_card("Sniper")

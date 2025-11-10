@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3 uid="uid://dg8jjjtik1cqu"]
+[gd_scene load_steps=6 format=3 uid="uid://dg8jjjtik1cqu"]
 
 [ext_resource type="Script" uid="uid://bgtvc4tspql6" path="res://scripts/ui/ui_new.gd" id="1_x4t5r"]
 [ext_resource type="PackedScene" uid="uid://c3i7pocfieiqa" path="res://scenes/ui/MiniMap.tscn" id="2_b27dg"]
 [ext_resource type="PackedScene" uid="uid://c5dvs4fwlgx7j" path="res://scenes/ui/RoboShopUI.tscn" id="3_fwgvj"]
+[ext_resource type="PackedScene" uid="uid://kfpts6ou4vh2" path="res://scenes/ui/UnitInfoUI.tscn" id="4_v76ne"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_m01cm"]
 bg_color = Color(0.09803922, 0.09803922, 0.09803922, 0.49411765)
@@ -38,3 +39,9 @@ offset_left = 1052.0
 offset_top = 585.0
 offset_right = 1052.0
 offset_bottom = 585.0
+
+[node name="UnitInfoUi" parent="." instance=ExtResource("4_v76ne")]
+offset_left = 39.0
+offset_top = 580.0
+offset_right = 39.0
+offset_bottom = 580.0

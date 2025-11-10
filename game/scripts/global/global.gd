@@ -4,6 +4,16 @@ var Uranium = 0
 var Metal = 0
 var next_unit_id = 1
 
+signal selected_unit_changed(u: Node)
+
+var SelectedUnit: Node = null
+
+func set_selected_unit(u: Node) -> void:
+	if SelectedUnit == u:
+		return
+	SelectedUnit = u
+	selected_unit_changed.emit(u)
+
 func get_next_unit_id() -> String:
 	var id = "u" + str(next_unit_id)
 	next_unit_id += 1

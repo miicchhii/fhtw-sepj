@@ -150,6 +150,10 @@ func step(_delta: float) -> void:
 func set_selected(value):
 	selected = value
 	box.visible = value
+	if (value == true):
+		Global.set_selected_unit(self)
+	if (value == false) && (Global.SelectedUnit == self):
+		Global.set_selected_unit(null)
 	queue_redraw()  # Redraw when selection changes
 
 func set_poi_positions(pois: Array):
