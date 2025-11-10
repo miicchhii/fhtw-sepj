@@ -112,12 +112,23 @@ func _on_selected_freed() -> void:
 
 # -------- Selection Helpers ----------
 func get_all_selected_units() -> Array:
-	"""Get all units with selected=true from ally group"""
+	"""Get all units with selected=true from both ally and enemy groups"""
 	if not is_inside_tree():
 		return []
-	return get_tree().get_nodes_in_group("ally").filter(
-		func(u): return u != null and is_instance_valid(u) and u.get("selected") == true
-	)
+
+	var selected_units := []
+
+	# Check allies
+	for u in get_tree().get_nodes_in_group("ally"):
+		if u != null and is_instance_valid(u) and u.get("selected") == true:
+			selected_units.append(u)
+
+	# Check enemies
+	for u in get_tree().get_nodes_in_group("enemy"):
+		if u != null and is_instance_valid(u) and u.get("selected") == true:
+			selected_units.append(u)
+
+	return selected_units
 
 func count_units_by_type(units: Array) -> Dictionary:
 	"""
@@ -365,8 +376,11 @@ func _get_policy_display(units: Array) -> String:
 		return "Mixed"
 
 func _format_policy_name(policy_id: String) -> String:
-	"""Format policy_id for display (e.g., 'policy_LT50' -> 'LT50')"""
-	if policy_id.begins_with("policy_"):
+	"""Format policy_id for display using display name from JSON"""
+	# Use display name if available, otherwise strip "policy_" prefix
+	if policy_display_names.has(policy_id):
+		return policy_display_names[policy_id]
+	elif policy_id.begins_with("policy_"):
 		return policy_id.substr(7)  # Remove "policy_" prefix
 	return policy_id
 

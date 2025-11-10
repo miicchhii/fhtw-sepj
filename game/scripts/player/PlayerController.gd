@@ -42,7 +42,8 @@ func handle_area_selection(selection_object) -> void:
 	"""
 	Handle area selection for units (drag selection).
 
-	Deselects all ally units, then selects units within the dragged area.
+	Prioritizes ally units, but allows selecting enemy units if no allies found.
+	This allows inspecting enemy stats for debugging/analysis.
 
 	Args:
 		selection_object: Object with 'start' and 'end' Vector2 properties
@@ -54,11 +55,18 @@ func handle_area_selection(selection_object) -> void:
 	var a0 = Vector2(min(start.x, end.x), min(start.y, end.y))
 	var a1 = Vector2(max(start.x, end.x), max(start.y, end.y))
 
-	# Get units in selected area
-	var selected_units = get_units_in_area([a0, a1])
+	# Try to get ally units first
+	var selected_units = get_units_in_area([a0, a1], "ally")
 
-	# Deselect all live ally units
+	# If no allies found, try enemy units
+	if selected_units.is_empty():
+		selected_units = get_units_in_area([a0, a1], "enemy")
+
+	# Deselect all units (both ally and enemy)
 	for u in game_node.get_tree().get_nodes_in_group("ally"):
+		if u != null and is_instance_valid(u) and u.has_method("set_selected"):
+			u.set_selected(false)
+	for u in game_node.get_tree().get_nodes_in_group("enemy"):
 		if u != null and is_instance_valid(u) and u.has_method("set_selected"):
 			u.set_selected(false)
 
@@ -67,12 +75,13 @@ func handle_area_selection(selection_object) -> void:
 		if u != null and is_instance_valid(u) and u.has_method("set_selected"):
 			u.set_selected(true)
 
-func get_units_in_area(area: Array) -> Array:
+func get_units_in_area(area: Array, group: String = "ally") -> Array:
 	"""
-	Get all ally units within a rectangular area.
+	Get all units from specified group within a rectangular area.
 
 	Args:
 		area: Array of 2 Vector2 positions defining rectangle corners
+		group: Unit group to search ("ally" or "enemy")
 
 	Returns:
 		Array of RTSUnit instances within the area
@@ -82,7 +91,7 @@ func get_units_in_area(area: Array) -> Array:
 	var a1 := Vector2(max(area[0].x, area[1].x), max(area[0].y, area[1].y))
 
 	var selected: Array = []
-	for unit in game_node.get_tree().get_nodes_in_group("ally"):
+	for unit in game_node.get_tree().get_nodes_in_group(group):
 		if unit == null or not is_instance_valid(unit):
 			continue
 		var p: Vector2 = unit.global_position
