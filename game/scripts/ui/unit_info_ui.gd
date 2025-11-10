@@ -35,13 +35,28 @@ func _ready() -> void:
 		)
 
 func _process(dt: float) -> void:
-	var u: Node = Global.get("SelectedUnit") as Node
+	var raw = Global.get("SelectedUnit")  # may be null or freed
+	var u: Node = null
+	if raw != null and is_instance_valid(raw):
+		u = raw as Node
+
+
+	# If selection changed
 	if u != _selected_cached:
+		if _selected_cached and is_instance_valid(_selected_cached):
+			if _selected_cached.tree_exited.is_connected(_on_selected_freed):
+				_selected_cached.tree_exited.disconnect(_on_selected_freed)
+
 		_selected_cached = u
+
+		# watch for this unit being freed (dies / removed from tree)
+		if u:
+			u.tree_exited.connect(_on_selected_freed, CONNECT_ONE_SHOT)
+
 		_update(u)
 		_refresh_accum = 0.0
 	else:
-		# same unit selected: refresh stats periodically
+		# same unit selected: refresh periodically
 		_refresh_accum += dt
 		if _refresh_accum >= 1.0 / max(1.0, refresh_rate_hz):
 			_refresh_accum = 0.0
@@ -49,9 +64,16 @@ func _process(dt: float) -> void:
 				_update(u)
 
 
+
 	if u != _selected_cached:
 		_selected_cached = u
 		_update(u)
+
+
+func _on_selected_freed() -> void:
+	_selected_cached = null
+	_update(null)
+
 
 # -------- UI ----------
 func _build_ui() -> void:
