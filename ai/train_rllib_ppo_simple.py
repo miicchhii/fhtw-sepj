@@ -84,34 +84,81 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     Godot's unit.set_policy("policy_name") method.
 
     Priority:
-    1. Try to read policy_id from episode info (dynamic assignment from Godot)
-    2. Fall back to default_policy from JSON config
+    1. Try to read from worker's environment agent_to_policy mapping (most reliable)
+    2. Try to read policy_id from episode info (for mid-episode switches)
+    3. Fall back to default_policy from JSON config
 
     Args:
         agent_id: Unit identifier (e.g., "u25", "u87")
         episode: Episode object containing agent info/observations (RLlib API)
-        worker: Worker object (unused, for API compatibility)
+        worker: Worker object that has access to the environment
 
     Returns:
         str: Policy ID from JSON config
     """
-    # Try to get policy from episode info (sent from Godot via observations)
+    # DEBUG: Track first few calls to understand what's happening
+    global _policy_mapping_debug_count
+    if '_policy_mapping_debug_count' not in globals():
+        _policy_mapping_debug_count = 0
+
+    # Method 1: Try to get from environment's global agent_to_policy mapping
+    # The environment stores this as a class variable that's shared across calls
+    try:
+        from godot_multi_env import GodotRTSMultiAgentEnv
+        if hasattr(GodotRTSMultiAgentEnv, '_agent_to_policy_global'):
+            agent_to_policy = GodotRTSMultiAgentEnv._agent_to_policy_global
+            if agent_id in agent_to_policy:
+                policy_id = agent_to_policy[agent_id]
+                if policy_id in POLICIES:
+                    if _policy_mapping_debug_count < 5:
+                        print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from global mapping)")
+                        _policy_mapping_debug_count += 1
+
+                    # Store what we're returning so environment can verify it
+                    if not hasattr(GodotRTSMultiAgentEnv, '_last_policy_mapping'):
+                        GodotRTSMultiAgentEnv._last_policy_mapping = {}
+                    GodotRTSMultiAgentEnv._last_policy_mapping[agent_id] = policy_id
+
+                    return policy_id
+    except (ImportError, AttributeError, KeyError, TypeError) as e:
+        pass
+
+    # Method 2: Try to get policy from episode info (for mid-episode switches)
     if episode is not None:
         try:
-            # Access the agent's last info dict which contains policy_id from Godot
-            agent_infos = episode.get_agents_to_act()
-            if agent_id in agent_infos:
+            info = None
+
+            if hasattr(episode, 'last_info_for'):
                 info = episode.last_info_for(agent_id)
-                if info and "policy_id" in info:
-                    policy_id = info["policy_id"]
-                    # Validate policy exists
-                    if policy_id in POLICIES:
-                        return policy_id  # Dynamic policy assignment from Godot
-        except (AttributeError, KeyError, TypeError):
-            # Episode API might differ or info not available, fall through
+            elif hasattr(episode, '_agent_to_last_info') and agent_id in episode._agent_to_last_info:
+                info = episode._agent_to_last_info[agent_id]
+            elif hasattr(episode, 'agent_infos') and agent_id in episode.agent_infos:
+                info = episode.agent_infos[agent_id]
+
+            if info and "policy_id" in info:
+                policy_id = info["policy_id"]
+                if policy_id in POLICIES:
+                    if _policy_mapping_debug_count < 5:
+                        print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from episode info)")
+                        _policy_mapping_debug_count += 1
+                    return policy_id
+        except (AttributeError, KeyError, TypeError) as e:
             pass
 
-    # Fallback to default policy from config
+    # Method 3: Fallback to default policy from config
+    if _policy_mapping_debug_count < 5:
+        print(f"DEBUG policy_mapping_fn: {agent_id} -> fallback to default ({policy_manager.default_policy})")
+        _policy_mapping_debug_count += 1
+
+    # Store the fallback policy
+    try:
+        from godot_multi_env import GodotRTSMultiAgentEnv
+        if not hasattr(GodotRTSMultiAgentEnv, '_last_policy_mapping'):
+            GodotRTSMultiAgentEnv._last_policy_mapping = {}
+        GodotRTSMultiAgentEnv._last_policy_mapping[agent_id] = policy_manager.default_policy
+    except:
+        pass
+
     return policy_manager.default_policy
 
 if __name__ == "__main__":

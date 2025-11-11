@@ -51,7 +51,11 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
 
         # Multi-policy support: Track which policy each unit is assigned to
         # Updated from Godot observations each step
+        # IMPORTANT: This is also set as a class variable so policy_mapping_fn can access it
         self.agent_to_policy = {}  # Maps agent_id -> policy_id (e.g., "u25" -> "policy_LT50")
+
+        # Store as class variable for access from policy_mapping_fn
+        GodotRTSMultiAgentEnv._agent_to_policy_global = self.agent_to_policy
 
         # Episode state
         self.episode_step = 0
@@ -494,7 +498,15 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
 
                 # Optional: Log significant combat rewards for debugging
                 if abs(reward) > 3.0:  # Log rewards above normal positional range
-                    print(f"Agent {agent_id} received significant reward: {reward:.2f}")
+                    # Show the policy that was actually used by policy_mapping_fn
+                    actual_policy = getattr(GodotRTSMultiAgentEnv, '_last_policy_mapping', {}).get(agent_id, "unknown")
+                    expected_policy = self.agent_to_policy.get(agent_id, "unknown")
+
+                    # Warn if mismatch between expected and actual
+                    if actual_policy != expected_policy and actual_policy != "unknown":
+                        print(f"Agent {agent_id} [EXPECTED:{expected_policy} ACTUAL:{actual_policy}] reward: {reward:.2f}")
+                    else:
+                        print(f"Agent {agent_id} ({actual_policy}) received significant reward: {reward:.2f}")
 
                 # Mark dead agents as terminated (not truncated)
                 if agent_id in dead_agents_this_step:
