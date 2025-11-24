@@ -14,13 +14,22 @@ const STAT_KEYS := [
 	["Speed", "Speed", "speed"],
 	# Display label "Attack Speed", read from any attack delay property names you use
 	["Attack Speed", "AttackDelay", "attack_delay", "FireDelay", "fire_delay", "attack_cooldown"],
+	["AI Model"],  # Special handling for policy_id
+]
+
+# Available AI policies (keep in sync with ai/rts_config.py)
+const AVAILABLE_POLICIES := [
+	"policy_LT50",
+	"policy_GT50",
+	"policy_frontline",
 ]
 
 
-var _icon: TextureRect
+var _icon_container: HBoxContainer  # Container for one or more icons
 var _name: Label
 var _grid: GridContainer
 var _value_labels: Dictionary = {}  # "HP" -> Label
+var _policy_dropdown: OptionButton  # Dropdown for policy selection
 var _selected_cached: Node = null
 var _refresh_accum: float = 0.0
 
@@ -74,15 +83,43 @@ func _on_selected_freed() -> void:
 	_selected_cached = null
 	_update(null)
 
+# -------- Selection Helpers ----------
+func get_all_selected_units() -> Array:
+	"""Get all units with selected=true from ally group"""
+	if not is_inside_tree():
+		return []
+	return get_tree().get_nodes_in_group("ally").filter(
+		func(u): return u != null and is_instance_valid(u) and u.get("selected") == true
+	)
+
+func count_units_by_type(units: Array) -> Dictionary:
+	"""
+	Count units grouped by type.
+	Returns: {"Infantry": 3, "Sniper": 2, "Heavy": 1}
+	"""
+	var counts := {}
+	for unit in units:
+		var type_name = _pretty_unit_name(unit)
+		counts[type_name] = counts.get(type_name, 0) + 1
+	return counts
+
+func get_unique_policies(units: Array) -> Array:
+	"""Get list of unique policy_ids from selected units"""
+	var policies := []
+	for unit in units:
+		var pid = unit.get("policy_id")
+		if pid != null and pid != "" and not policies.has(pid):
+			policies.append(pid)
+	return policies
 
 # -------- UI ----------
 func _build_ui() -> void:
 	# bottom-left, like a HUD card
 	anchor_left = 0.0; anchor_top = 1.0; anchor_right = 0.0; anchor_bottom = 1.0
-	offset_left = 8; offset_top = -195; offset_right = 260; offset_bottom = -8
+	offset_left = 8; offset_top = -280; offset_right = 260; offset_bottom = -8
 
 	var panel := Panel.new()
-	panel.size = Vector2(252, 192)   # was ~212,132
+	panel.size = Vector2(252, 272)   # Increased height to accommodate dropdown
 	add_child(panel)
 
 	var sb := StyleBoxFlat.new()
@@ -99,10 +136,11 @@ func _build_ui() -> void:
 	top.add_theme_constant_override("separation", 8)
 	root.add_child(top)
 
-	_icon = TextureRect.new()
-	_icon.custom_minimum_size = Vector2(40,40)
-	_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	top.add_child(_icon)
+	# Icon container - will hold one or more unit type icons
+	_icon_container = HBoxContainer.new()
+	_icon_container.add_theme_constant_override("separation", 4)
+	_icon_container.custom_minimum_size = Vector2(40, 40)
+	top.add_child(_icon_container)
 
 	_name = Label.new()
 	_name.text = "No unit selected"
@@ -124,6 +162,17 @@ func _build_ui() -> void:
 		_grid.add_child(klabel); _grid.add_child(vlabel)
 		_value_labels[nice] = vlabel
 
+	# Add policy selection dropdown
+	var policy_label := Label.new()
+	policy_label.text = "Change AI Model:"
+	root.add_child(policy_label)
+
+	_policy_dropdown = OptionButton.new()
+	for policy_id in AVAILABLE_POLICIES:
+		_policy_dropdown.add_item(_format_policy_name(policy_id))
+	_policy_dropdown.item_selected.connect(_on_policy_selected)
+	root.add_child(_policy_dropdown)
+
 	# start hidden until a unit is selected
 	_set_visible(false)
 
@@ -137,15 +186,39 @@ func _update(u: Node) -> void:
 		return
 	_set_visible(true)
 
-	_name.text = _pretty_unit_name(u)
-	_icon.texture = _pick_icon_for(u)
+	# Get all selected units for multi-selection support
+	var all_selected = get_all_selected_units()
+
+	# Update icon display based on selection
+	_update_icon_display(all_selected)
+
+	# Update name display
+	var type_counts = count_units_by_type(all_selected)
+	if all_selected.size() > 1:
+		if type_counts.size() == 1:
+			# All same type
+			_name.text = "%s (%d units)" % [_pretty_unit_name(u), all_selected.size()]
+		else:
+			# Multiple types - just show total count
+			_name.text = "%d units selected" % all_selected.size()
+	else:
+		_name.text = _pretty_unit_name(u)
 
 	# Fill stats if present
+	# Hide individual stats for mixed type selection (stats vary by type)
+	var show_individual_stats = type_counts.size() == 1
+
 	for key_group in STAT_KEYS:
 		var nice: String = key_group[0]
 		var shown: String = "-"
 
-		if nice == "Attack Speed":
+		if nice == "AI Model":
+			# Always show policy for all selection types
+			shown = _get_policy_display(all_selected)
+		elif not show_individual_stats:
+			# Mixed types - don't show unit-specific stats
+			shown = "-"
+		elif nice == "Attack Speed":
 			# derive from delay: attacks per second
 			var delay: float = -1.0
 			for real_key in key_group.slice(1): # skip the display label
@@ -163,7 +236,7 @@ func _update(u: Node) -> void:
 				if val != null:
 					shown = str(val)
 					break
-					
+
 		(_value_labels[nice] as Label).text = shown
 
 
@@ -194,10 +267,103 @@ func _enum_to_name(t) -> String:
 
 func _pick_icon_for(u: Node) -> Texture2D:
 	var n := _pretty_unit_name(u)
-	if n == "Heavy": return icon_heavy
-	if n == "Sniper": return icon_sniper
-	if n == "Infantry": return icon_infantry
+	return _get_icon_by_name(n)
+
+func _get_icon_by_name(type_name: String) -> Texture2D:
+	"""Get icon texture for a unit type name"""
+	if type_name == "Heavy": return icon_heavy
+	if type_name == "Sniper": return icon_sniper
+	if type_name == "Infantry": return icon_infantry
 	return icon_infantry
+
+func _update_icon_display(units: Array) -> void:
+	"""Update icon display based on selected units"""
+	# Clear existing icons
+	for child in _icon_container.get_children():
+		child.queue_free()
+
+	if units.is_empty():
+		return
+
+	var type_counts = count_units_by_type(units)
+
+	if type_counts.size() == 1:
+		# Single type: show large icon
+		var icon = TextureRect.new()
+		icon.custom_minimum_size = Vector2(40, 40)
+		icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.texture = _pick_icon_for(units[0])
+		_icon_container.add_child(icon)
+	else:
+		# Multiple types: show small icons with counts
+		# Total height must match single icon (40px) to prevent layout shift
+		for type_name in type_counts.keys():
+			var vbox = VBoxContainer.new()
+			vbox.add_theme_constant_override("separation", 0)
+			vbox.custom_minimum_size = Vector2(28, 40)
+			vbox.size = Vector2(28, 40)  # Force exact size to prevent layout shift
+			vbox.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+
+			# Small icon - takes remaining space after label
+			var icon = TextureRect.new()
+			icon.custom_minimum_size = Vector2(26, 26)
+			icon.expand_mode = TextureRect.EXPAND_FIT_HEIGHT
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.texture = _get_icon_by_name(type_name)
+			icon.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			vbox.add_child(icon)
+
+			# Count label below
+			var count_label = Label.new()
+			count_label.text = str(type_counts[type_name])
+			count_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			count_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+			count_label.add_theme_font_size_override("font_size", 12)
+			count_label.size_flags_vertical = Control.SIZE_SHRINK_END
+			vbox.add_child(count_label)
+
+			_icon_container.add_child(vbox)
+
+func _get_policy_display(units: Array) -> String:
+	"""Get policy display string for selected units"""
+	var policies = get_unique_policies(units)
+
+	if policies.is_empty():
+		return "None"
+	elif policies.size() == 1:
+		return _format_policy_name(policies[0])
+	else:
+		return "Mixed"
+
+func _format_policy_name(policy_id: String) -> String:
+	"""Format policy_id for display (e.g., 'policy_LT50' -> 'LT50')"""
+	if policy_id.begins_with("policy_"):
+		return policy_id.substr(7)  # Remove "policy_" prefix
+	return policy_id
+
+func _on_policy_selected(index: int) -> void:
+	"""Handle policy selection from dropdown - applies to ALL selected units"""
+	if index < 0 or index >= AVAILABLE_POLICIES.size():
+		return
+
+	var selected_policy = AVAILABLE_POLICIES[index]
+	var units = get_all_selected_units()
+
+	if units.is_empty():
+		return
+
+	# Apply policy to all selected units
+	for unit in units:
+		if unit.has_method("set_policy"):
+			unit.set_policy(selected_policy)
+
+	# Show feedback in console
+	print("Applied policy '%s' to %d unit(s)" % [_format_policy_name(selected_policy), units.size()])
+
+	# Refresh display to show updated policy
+	if _selected_cached != null:
+		_update(_selected_cached)
 
 # -------- Selection hook ----------
 func _try_connect_global_signal() -> void:

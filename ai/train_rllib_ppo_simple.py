@@ -1,10 +1,5 @@
 # train_rllib_ppo_simple.py - Multi-policy PPO training for Godot RTS units
 #
-# This script trains 100 RTS units across 3 policies:
-# - policy_LT50: 49 trainable units (u1-u49)
-# - policy_GT50: 26 frozen baseline units (u50-u75)
-# - policy_frontline: 25 trainable frontline units (u76-u100)
-#
 # The system supports dynamic policy assignment - units can switch policies at runtime
 # via Godot's unit.set_policy() method. Policy assignments are sent from Godot in
 # observations and read via policy_mapping_fn.
