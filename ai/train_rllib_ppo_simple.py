@@ -1,22 +1,27 @@
 # train_rllib_ppo_simple.py - Multi-policy PPO training for Godot RTS units
 #
+# Loads policy configurations from JSON (single source of truth shared with Godot).
+# Each policy can have:
+# - Custom reward weights (handled by Godot RewardCalculator)
+# - Custom neural network architecture
+# - Trainable or frozen status
+#
 # The system supports dynamic policy assignment - units can switch policies at runtime
-# via Godot's unit.set_policy() method. Policy assignments are sent from Godot in
-# observations and read via policy_mapping_fn.
+# via Godot's unit.set_policy() method.
 
 import gymnasium as gym
 import numpy as np
 import ray
 from ray.rllib.algorithms.ppo import PPOConfig
+from ray.rllib.policy.policy import PolicySpec
 from godot_multi_env import GodotRTSMultiAgentEnv
+from policy_manager import PolicyManager
 import os
 
-# Import central configuration (single source of truth)
+# Import central configuration
 from rts_config import (
     OBSERVATION_SPACE,
     ACTION_SPACE,
-    POLICY_NAMES,
-    DEFAULT_TRAINABLE_POLICIES,
     LEARNING_RATE,
     ENTROPY_COEFF,
     GAMMA,
@@ -27,8 +32,6 @@ from rts_config import (
     USE_GAE,
     GAE_LAMBDA,
     VF_CLIP_PARAM,
-    FCNET_HIDDENS,
-    FCNET_ACTIVATION,
     FCNET_WEIGHTS_INITIALIZER,
     FCNET_BIAS_INITIALIZER,
     DEFAULT_HOST,
@@ -36,18 +39,41 @@ from rts_config import (
     DEFAULT_TIMEOUT
 )
 
-# Observation and action spaces imported from central config (rts_config.py)
-# This ensures the training script and environment always stay in sync
-# See rts_config.py for detailed documentation of space structures
+# Load policy configurations from JSON
+policy_manager = PolicyManager()
+policy_manager.print_summary()
+
+# Observation and action spaces (shared across all policies)
 OBS_SPACE = OBSERVATION_SPACE
 ACT_SPACE = ACTION_SPACE
 
-# Three policies with different training configurations
-POLICIES = {
-    "policy_LT50": (None, OBS_SPACE, ACT_SPACE, {}),      # 49 units (u1-u49), trainable
-    "policy_GT50": (None, OBS_SPACE, ACT_SPACE, {}),      # 26 units (u50-u75), frozen baseline
-    "policy_frontline": (None, OBS_SPACE, ACT_SPACE, {}), # 25 units (u76-u100), trainable
-}
+# Build policy configurations dynamically from JSON
+POLICIES = {}
+for policy_id in policy_manager.get_policy_ids():
+    # Get network configuration for this policy
+    network_config = policy_manager.get_network_config(policy_id)
+
+    # Build model config with policy-specific network architecture
+    model_config = {
+        "fcnet_hiddens": network_config.get("fcnet_hiddens", [128, 256, 128]),
+        "fcnet_activation": network_config.get("fcnet_activation", "tanh"),
+        "fcnet_weights_initializer": FCNET_WEIGHTS_INITIALIZER,
+        "fcnet_bias_initializer": FCNET_BIAS_INITIALIZER,
+    }
+
+    # Create PolicySpec with custom config
+    POLICIES[policy_id] = PolicySpec(
+        policy_class=None,  # Use default PPO policy
+        observation_space=OBS_SPACE,
+        action_space=ACT_SPACE,
+        config={"model": model_config}
+    )
+
+print(f"\n=== Configured {len(POLICIES)} policies for training ===")
+for policy_id in POLICIES.keys():
+    net_config = policy_manager.get_network_config(policy_id)
+    trainable = policy_manager.is_trainable(policy_id)
+    print(f"  {policy_id}: {net_config.get('fcnet_hiddens')} [{'TRAIN' if trainable else 'FROZEN'}]")
 
 def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     """
@@ -58,48 +84,82 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     Godot's unit.set_policy("policy_name") method.
 
     Priority:
-    1. Try to read policy_id from episode info (dynamic assignment from Godot)
-    2. Fall back to unit ID-based assignment (u1-49→LT50, u50-75→GT50, u76-100→frontline)
-    3. Default to policy_LT50 if all else fails
+    1. Try to read from worker's environment agent_to_policy mapping (most reliable)
+    2. Try to read policy_id from episode info (for mid-episode switches)
+    3. Fall back to default_policy from JSON config
 
     Args:
         agent_id: Unit identifier (e.g., "u25", "u87")
         episode: Episode object containing agent info/observations (RLlib API)
-        worker: Worker object (unused, for API compatibility)
+        worker: Worker object that has access to the environment
 
     Returns:
-        str: Policy name ("policy_LT50", "policy_GT50", or "policy_frontline")
+        str: Policy ID from JSON config
     """
-    # Try to get policy from episode info (sent from Godot via observations)
-    if episode is not None:
-        try:
-            # Access the agent's last info dict which contains policy_id from Godot
-            agent_infos = episode.get_agents_to_act()
-            if agent_id in agent_infos:
-                info = episode.last_info_for(agent_id)
-                if info and "policy_id" in info:
-                    policy_id = info["policy_id"]
-                    return policy_id  # Dynamic policy assignment
-        except (AttributeError, KeyError, TypeError):
-            # Episode API might differ or info not available, fall through
-            pass
+    # DEBUG: Track first few calls to understand what's happening
+    global _policy_mapping_debug_count
+    if '_policy_mapping_debug_count' not in globals():
+        _policy_mapping_debug_count = 0
 
-    # Fallback: Derive policy from unit ID number
-    # This handles initial assignment before first observation is received
+    # Method 1: Try to get from environment's global agent_to_policy mapping
+    # The environment stores this as a class variable that's shared across calls
     try:
-        if agent_id.startswith("u"):
-            unit_num = int(agent_id[1:])
-            if unit_num < 50:
-                return "policy_LT50"      # u1-u49: trainable
-            elif unit_num < 76:
-                return "policy_GT50"      # u50-u75: frozen baseline
-            else:
-                return "policy_frontline"  # u76-u100: trainable frontline
-    except (ValueError, IndexError):
+        from godot_multi_env import GodotRTSMultiAgentEnv
+        if hasattr(GodotRTSMultiAgentEnv, '_agent_to_policy_global'):
+            agent_to_policy = GodotRTSMultiAgentEnv._agent_to_policy_global
+            if agent_id in agent_to_policy:
+                policy_id = agent_to_policy[agent_id]
+                if policy_id in POLICIES:
+                    if _policy_mapping_debug_count < 5:
+                        print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from global mapping)")
+                        _policy_mapping_debug_count += 1
+
+                    # Store what we're returning so environment can verify it
+                    if not hasattr(GodotRTSMultiAgentEnv, '_last_policy_mapping'):
+                        GodotRTSMultiAgentEnv._last_policy_mapping = {}
+                    GodotRTSMultiAgentEnv._last_policy_mapping[agent_id] = policy_id
+
+                    return policy_id
+    except (ImportError, AttributeError, KeyError, TypeError) as e:
         pass
 
-    # Final fallback for malformed IDs
-    return "policy_LT50"
+    # Method 2: Try to get policy from episode info (for mid-episode switches)
+    if episode is not None:
+        try:
+            info = None
+
+            if hasattr(episode, 'last_info_for'):
+                info = episode.last_info_for(agent_id)
+            elif hasattr(episode, '_agent_to_last_info') and agent_id in episode._agent_to_last_info:
+                info = episode._agent_to_last_info[agent_id]
+            elif hasattr(episode, 'agent_infos') and agent_id in episode.agent_infos:
+                info = episode.agent_infos[agent_id]
+
+            if info and "policy_id" in info:
+                policy_id = info["policy_id"]
+                if policy_id in POLICIES:
+                    if _policy_mapping_debug_count < 5:
+                        print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from episode info)")
+                        _policy_mapping_debug_count += 1
+                    return policy_id
+        except (AttributeError, KeyError, TypeError) as e:
+            pass
+
+    # Method 3: Fallback to default policy from config
+    if _policy_mapping_debug_count < 5:
+        print(f"DEBUG policy_mapping_fn: {agent_id} -> fallback to default ({policy_manager.default_policy})")
+        _policy_mapping_debug_count += 1
+
+    # Store the fallback policy
+    try:
+        from godot_multi_env import GodotRTSMultiAgentEnv
+        if not hasattr(GodotRTSMultiAgentEnv, '_last_policy_mapping'):
+            GodotRTSMultiAgentEnv._last_policy_mapping = {}
+        GodotRTSMultiAgentEnv._last_policy_mapping[agent_id] = policy_manager.default_policy
+    except:
+        pass
+
+    return policy_manager.default_policy
 
 if __name__ == "__main__":
     # Suppress deprecation warnings for cleaner output
@@ -149,11 +209,13 @@ if __name__ == "__main__":
     print("Observation space:", OBS_SPACE)
     print("Action space:", ACT_SPACE)
 
-    # Configure which policies to train (can be changed at any time)
-    # Set to subset of policy names to freeze specific policies
-    POLICIES_TO_TRAIN = DEFAULT_TRAINABLE_POLICIES  # From central config
-    print(f"\nTraining configuration: {POLICIES_TO_TRAIN}")
-    print(f"Frozen policies: {[p for p in POLICIES.keys() if p not in POLICIES_TO_TRAIN]}\n")
+    # Configure which policies to train (loaded from JSON)
+    # Frozen policies are used as baselines for comparison
+    POLICIES_TO_TRAIN = policy_manager.get_trainable_policies()
+    FROZEN_POLICIES = policy_manager.get_frozen_policies()
+    print(f"\nTraining configuration:")
+    print(f"  Trainable policies: {POLICIES_TO_TRAIN}")
+    print(f"  Frozen policies: {FROZEN_POLICIES}\n")
 
     # PPO configuration for 3-policy multi-agent RTS training
     # Architecture: Single worker with 100 agents split across 3 policies
@@ -191,16 +253,8 @@ if __name__ == "__main__":
             lambda_=GAE_LAMBDA,
             entropy_coeff=ENTROPY_COEFF,
         )
-        .rl_module(
-            model_config={
-                "fcnet_hiddens": FCNET_HIDDENS,
-                "fcnet_activation": FCNET_ACTIVATION,
-                "fcnet_weights_initializer": FCNET_WEIGHTS_INITIALIZER,
-                "fcnet_bias_initializer": FCNET_BIAS_INITIALIZER,
-            }
-        )
         .multi_agent(
-            policies=POLICY_NAMES,  # From central config
+            policies=POLICIES,  # Loaded from JSON via PolicyManager
             policy_mapping_fn=policy_mapping_fn,
             # Use POLICIES_TO_TRAIN variable to control which policies are trained
             # Policies not in this list will be frozen (inference only, no gradient updates)
@@ -224,7 +278,8 @@ if __name__ == "__main__":
     print("\n" + "="*50)
     # Checkpoint loading configuration
     # Priority: latest numbered checkpoint > checkpoint_3policy > train from scratch
-    skip_checkpoint_loading = False  # Set to True to train from scratch
+    # IMPORTANT: Set to True when policy configuration changes (policy names/count)
+    skip_checkpoint_loading = True  # Set to False to load from checkpoint (policies must match!)
 
     # Determine which checkpoint to load
     checkpoint_to_load = None
@@ -239,6 +294,8 @@ if __name__ == "__main__":
                 print(f"No training checkpoints found, loading baseline: {checkpoint_3policy}")
             else:
                 print("No checkpoints found, training from scratch")
+    else:
+        print("Checkpoint loading disabled - training from scratch with new policy configuration")
 
     # Build algorithm
     print("Building algorithm...")
@@ -369,42 +426,20 @@ if __name__ == "__main__":
 
             if learners:
                 print("  Learner metrics found")
-                print(f"  Available policies in learners: {list(learners.keys())}")
 
-                # Dynamically determine labels based on POLICIES_TO_TRAIN configuration
-                # The structure might be nested differently
-                if "policy_LT50" in learners:
-                    lt50_stats = learners["policy_LT50"]
-                    lt50_label = "LT50 TRAINABLE" if "policy_LT50" in POLICIES_TO_TRAIN else "LT50 FROZEN"
-                    print(f"    [{lt50_label}] Policy loss: {lt50_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [{lt50_label}] VF loss: {lt50_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [{lt50_label}] Entropy: {lt50_stats.get('entropy', 'N/A')}")
-                    if "policy_LT50" not in POLICIES_TO_TRAIN:
-                        print(f"    WARNING: policy_LT50 appears in learners but is configured as FROZEN!")
+                # Display metrics for each policy dynamically
+                for policy_id in policy_manager.get_policy_ids():
+                    if policy_id in learners:
+                        stats = learners[policy_id]
+                        trainable = policy_manager.is_trainable(policy_id)
+                        display_name = policy_manager.get_display_name(policy_id)
+                        label = f"{display_name} ({'TRAIN' if trainable else 'FROZEN'})"
 
-                if "policy_frontline" in learners:
-                    frontline_stats = learners["policy_frontline"]
-                    frontline_label = "FRONTLINE TRAINABLE" if "policy_frontline" in POLICIES_TO_TRAIN else "FRONTLINE FROZEN"
-                    print(f"    [{frontline_label}] Policy loss: {frontline_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [{frontline_label}] VF loss: {frontline_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [{frontline_label}] Entropy: {frontline_stats.get('entropy', 'N/A')}")
-                    if "policy_frontline" not in POLICIES_TO_TRAIN:
-                        print(f"    WARNING: policy_frontline appears in learners but is configured as FROZEN!")
-
-                if "policy_GT50" in learners:
-                    gt50_stats = learners["policy_GT50"]
-                    gt50_label = "GT50 TRAINABLE" if "policy_GT50" in POLICIES_TO_TRAIN else "GT50 FROZEN"
-                    print(f"    [{gt50_label}] Policy loss: {gt50_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [{gt50_label}] VF loss: {gt50_stats.get('vf_loss', 'N/A')}")
-                    print(f"    [{gt50_label}] Entropy: {gt50_stats.get('entropy', 'N/A')}")
-                    if "policy_GT50" not in POLICIES_TO_TRAIN:
-                        print(f"    WARNING: policy_GT50 appears in learners but is configured as FROZEN!")
-
-                if "default_policy" in learners:
-                    default_stats = learners["default_policy"]
-                    print(f"    [LEGACY] Policy loss: {default_stats.get('policy_loss', 'N/A')}")
-                    print(f"    [LEGACY] VF loss: {default_stats.get('vf_loss', 'N/A')}")
-                    print(f"    Entropy: {default_stats.get('entropy', 'N/A')}")
+                        print(f"    [{label}]")
+                        print(f"      Policy loss: {stats.get('policy_loss', 'N/A')}")
+                        print(f"      VF loss: {stats.get('vf_loss', 'N/A')}")
+                        print(f"      Entropy: {stats.get('entropy', 'N/A')}")
+                        print(f"      Mean KL: {stats.get('mean_kl_loss', 'N/A')}")
 
             # Save checkpoint periodically
             if (i + 1) % 1 == 0:

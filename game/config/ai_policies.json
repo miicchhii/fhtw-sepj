@@ -1,0 +1,137 @@
+{
+  "ally_team_policy": "policy_aggressive_1",
+  "enemy_team_policy": "policy_defensive_1",
+  "policies": {
+	"policy_aggressive_1": {
+	  "display_name": "Aggressive Alpha",
+	  "description": "Rushes enemy base aggressively with high damage focus",
+	  "trainable": true,
+	  "network_config": {
+		"fcnet_hiddens": [64, 64, 64],
+		"fcnet_activation": "tanh"
+	  },
+	  "reward_profile": {
+		"damage_to_unit": 0.2,
+		"damage_to_base": 2.0,
+		"unit_kill": 20.0,
+		"base_kill": 300.0,
+		"damage_received": -0.1,
+		"death": -5.0,
+		"team_victory": 50.0,
+		"team_defeat": -25.0,
+		"proximity_to_enemy_base_multiplier": 3.0,
+		"proximity_to_ally_base_multiplier": -0.5,
+		"alive_per_step": 0.01,
+		"movement_continue_straight": 0.3,
+		"movement_reverse_direction": -0.5,
+		"base_defense_penalty": -0.2,
+		"tactical_spacing": -0.5
+	  }
+	},
+	"policy_aggressive_2": {
+	  "display_name": "Aggressive Beta",
+	  "description": "Alternative aggressive strategy emphasizing unit kills",
+	  "trainable": true,
+	  "network_config": {
+		"fcnet_hiddens": [128, 256, 128],
+		"fcnet_activation": "tanh"
+	  },
+	  "reward_profile": {
+		"damage_to_unit": 0.3,
+		"damage_to_base": 1.5,
+		"unit_kill": 25.0,
+		"base_kill": 300.0,
+		"damage_received": -0.1,
+		"death": -5.0,
+		"team_victory": 50.0,
+		"team_defeat": -25.0,
+		"proximity_to_enemy_base_multiplier": 2.5,
+		"proximity_to_ally_base_multiplier": -0.3,
+		"alive_per_step": 0.01,
+		"movement_continue_straight": 0.2,
+		"movement_reverse_direction": -0.3,
+		"base_defense_penalty": -0.1,
+		"tactical_spacing": -0.3
+	  }
+	},
+	"policy_defensive_1": {
+	  "display_name": "Defensive Alpha",
+	  "description": "Protects allied base with strong defensive positioning",
+	  "trainable": true,
+	  "network_config": {
+		"fcnet_hiddens": [64, 64, 64],
+		"fcnet_activation": "tanh"
+	  },
+	  "reward_profile": {
+		"damage_to_unit": 0.2,
+		"damage_to_base": 0.8,
+		"unit_kill": 15.0,
+		"base_kill": 200.0,
+		"damage_received": -0.1,
+		"death": -5.0,
+		"team_victory": 50.0,
+		"team_defeat": -25.0,
+		"proximity_to_enemy_base_multiplier": 0.5,
+		"proximity_to_ally_base_multiplier": 2.0,
+		"alive_per_step": 0.01,
+		"movement_continue_straight": 0.8,
+		"movement_reverse_direction": -1.5,
+		"base_defense_penalty": -2.0,
+		"tactical_spacing": -1.5
+	  }
+	},
+	"policy_defensive_2": {
+	  "display_name": "Defensive Beta",
+	  "description": "Alternative defensive strategy with maximum base protection",
+	  "trainable": true,
+	  "network_config": {
+		"fcnet_hiddens": [128, 256, 128],
+		"fcnet_activation": "tanh"
+	  },
+	  "reward_profile": {
+		"damage_to_unit": 0.15,
+		"damage_to_base": 0.5,
+		"unit_kill": 18.0,
+		"base_kill": 200.0,
+		"damage_received": -0.1,
+		"death": -5.0,
+		"team_victory": 50.0,
+		"team_defeat": -25.0,
+		"proximity_to_enemy_base_multiplier": 0.3,
+		"proximity_to_ally_base_multiplier": 2.5,
+		"alive_per_step": 0.01,
+		"movement_continue_straight": 1.0,
+		"movement_reverse_direction": -2.0,
+		"base_defense_penalty": -3.0,
+		"tactical_spacing": -2.0
+	  }
+	},
+	"policy_baseline": {
+	  "display_name": "Baseline",
+	  "description": "Balanced baseline policy for comparison",
+	  "trainable": true,
+	  "network_config": {
+		"fcnet_hiddens": [128, 256, 128],
+		"fcnet_activation": "tanh"
+	  },
+	  "reward_profile": {
+		"damage_to_unit": 0.2,
+		"damage_to_base": 1.0,
+		"unit_kill": 15.0,
+		"base_kill": 200.0,
+		"damage_received": -0.1,
+		"death": -5.0,
+		"team_victory": 50.0,
+		"team_defeat": -25.0,
+		"proximity_to_enemy_base_multiplier": 1.5,
+		"proximity_to_ally_base_multiplier": 0.5,
+		"alive_per_step": 0.01,
+		"movement_continue_straight": 0.5,
+		"movement_reverse_direction": -1.0,
+		"base_defense_penalty": -0.5,
+		"tactical_spacing": -1.0
+	  }
+	}
+  },
+  "default_policy": "policy_baseline"
+}

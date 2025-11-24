@@ -70,24 +70,8 @@ var reward_tactical_spacing: float = GameConfig.REWARD_TACTICAL_SPACING
 var tactical_spacing_threshold: float = GameConfig.TACTICAL_SPACING_THRESHOLD
 
 func _ready() -> void:
-	# Initialize reward calculator with current reward configuration
-	reward_calculator = RewardCalculator.new(
-		reward_damage_to_unit,
-		reward_damage_to_base,
-		reward_unit_kill,
-		reward_base_kill,
-		penalty_damage_received,
-		penalty_death,
-		reward_team_victory,
-		penalty_team_defeat,
-		reward_position_multiplier,
-		reward_alive_per_step,
-		reward_continue_straight,
-		penalty_reverse_direction,
-		penalty_base_damage_per_unit,
-		reward_tactical_spacing,
-		tactical_spacing_threshold
-	)
+	# Initialize reward calculator (loads policy configs from JSON)
+	reward_calculator = RewardCalculator.new()
 
 	# Initialize observation builder
 	observation_builder = ObservationBuilder.new(map_w, map_h)
