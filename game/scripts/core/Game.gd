@@ -189,6 +189,11 @@ func _physics_process(_delta: float) -> void:
 				obs_ally_base,
 				obs_enemy_base
 			)
+
+			# Check if any policy changed this step (triggers episode reset in Python)
+			obs["policy_changed"] = _any_policy_changed()
+			_clear_all_policy_changed_flags()
+
 			AiServer.send_observation(obs)
 
 			var game_won = (enemies_alive == 0 and allies_alive > 0) or enemy_base_destroyed
@@ -285,3 +290,35 @@ func _ai_request_reset() -> void:
 func _on_area_selected(object):
 	"""Handle area selection by delegating to PlayerController."""
 	player_controller.handle_area_selection(object)
+
+# Policy change detection for episode reset
+func _any_policy_changed() -> bool:
+	"""Check if any unit had its policy changed this step (via UI)."""
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.policy_changed_this_step:
+			return true
+	return false
+
+func _clear_all_policy_changed_flags() -> void:
+	"""Clear policy change flags after processing."""
+	for unit in get_tree().get_nodes_in_group("units"):
+		unit.clear_policy_changed_flag()
+
+func _ai_send_current_observation() -> void:
+	"""
+	Send current game state as observation without resetting.
+	Used for soft resets when policy changes - preserves unit positions, HP, etc.
+	"""
+	var all_units = get_tree().get_nodes_in_group("units")
+	var obs_ally_base = ally_base if is_instance_valid(ally_base) else null
+	var obs_enemy_base = enemy_base if is_instance_valid(enemy_base) else null
+
+	var obs = observation_builder.build_observation(
+		ai_step,
+		tick,
+		all_units,
+		obs_ally_base,
+		obs_enemy_base
+	)
+	obs["policy_changed"] = false  # Clear flag for new episode
+	AiServer.send_observation(obs)

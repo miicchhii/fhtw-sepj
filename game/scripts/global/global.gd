@@ -25,7 +25,7 @@ enum UnitType {
 	HEAVY
 }
 
-func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFANTRY):
+func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFANTRY, policy_id: String = ""):
 	var unit_scene
 	var unit_type_name = ""
 
@@ -45,6 +45,10 @@ func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFAN
 	unit.unit_id = get_next_unit_id()
 	unit.is_enemy = is_enemy
 	unit.position = pos
+
+	# Pre-set policy if provided (prevents _assign_policy() from overwriting)
+	if policy_id != "":
+		unit.policy_id = policy_id
 
 	var container_name = "Enemies" if is_enemy else "Units2"
 	var container = get_tree().get_root().get_node("World/" + container_name)

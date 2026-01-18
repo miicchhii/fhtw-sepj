@@ -62,6 +62,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         # Episode state
         self.episode_step = 0
         self.episode_ended = False
+        self._soft_reset_pending = False  # If True, next reset() preserves game state
 
         # Observation and action spaces (imported from central config)
         # See rts_config.py for detailed space documentation
@@ -386,15 +387,22 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         """Reset the environment"""
         super().reset(seed=seed)
 
-        print("Resetting Godot environment...")
-
         # Reset episode tracking
         self.episode_step = 0
         self.episode_ended = False
 
-        # Send reset command
-        if not self._send_message({"type": "_ai_request_reset"}):
-            raise RuntimeError("Failed to send reset command to Godot")
+        # Check if this should be a soft reset (preserve game state)
+        if self._soft_reset_pending:
+            print("Performing soft reset (game state preserved, new policy mappings)")
+            self._soft_reset_pending = False
+            # Request current observation without resetting game
+            if not self._send_message({"type": "_ai_request_observation"}):
+                raise RuntimeError("Failed to request observation from Godot")
+        else:
+            print("Resetting Godot environment...")
+            # Full reset - respawn units, reset bases
+            if not self._send_message({"type": "_ai_request_reset"}):
+                raise RuntimeError("Failed to send reset command to Godot")
 
         # Wait for initial observation
         godot_obs = self._wait_for_observation(timeout=5.0)
@@ -455,6 +463,24 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             print("Failed to receive observation, connection may be lost")
             self.connected = False
             raise RuntimeError("Failed to receive observation after step")
+
+        # Check if Godot signaled a policy change (requires episode reset)
+        if godot_obs.get("policy_changed", False):
+            print("Policy change detected via UI - soft episode reset (game state preserved)")
+            # Set flag so next reset() does a soft reset (no game state change)
+            self._soft_reset_pending = True
+            # Extract observations first so we have valid data to return
+            observations, infos = self._extract_obs_and_agents(godot_obs)
+            self.last_obs = observations
+            # Return truncated=True for all agents to signal episode end
+            # RLlib will call reset() which starts a new episode with correct policy mappings
+            rewards = {agent_id: 0.0 for agent_id in self.agents}
+            terminateds = {agent_id: False for agent_id in self.agents}
+            truncateds = {agent_id: True for agent_id in self.agents}
+            terminateds["__all__"] = False
+            truncateds["__all__"] = True
+            self.episode_ended = True
+            return observations, rewards, terminateds, truncateds, infos
 
         observations, infos = self._extract_obs_and_agents(godot_obs)
         self.last_obs = observations
