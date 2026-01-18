@@ -97,23 +97,29 @@ func _ready() -> void:
 	# Initialize episode manager
 	episode_manager = EpisodeManager.new(GameConfig.MAX_EPISODE_STEPS)
 
+	# Get the first matchup for episode 0
+	var first_matchup = episode_manager.get_first_matchup()
+	var ally_policy = first_matchup[0]
+	var enemy_policy = first_matchup[1]
+	print("Game: First matchup - allies: ", ally_policy, ", enemies: ", enemy_policy)
+
 	# Initialize player controller for manual control
 	player_controller = PlayerController.new(self)
 
-	# Spawn bases and units
+	# Spawn bases and units with assigned policies
 	var bases = spawn_manager.spawn_bases(episode_manager.get_spawn_sides_swapped())
 	ally_base = bases["ally_base"]
 	enemy_base = bases["enemy_base"]
 
-	init_units()
+	init_units(ally_policy, enemy_policy)
 	get_units()
 
 	# IMPORTANT: Add this node to the "game" group so AiServer can find it
 	add_to_group("game")
 	print("Game: Added to 'game' group")
 
-func init_units():
-	"""Initialize units container and spawn all units."""
+func init_units(ally_policy: String, enemy_policy: String):
+	"""Initialize units container and spawn all units with assigned policies."""
 	print("Game: Starting init_units()")
 
 	var units_container = get_node("Units")
@@ -124,8 +130,8 @@ func init_units():
 		add_child(units_container)
 		print("Game: Created new Units container")
 
-	# Spawn all units using spawn manager
-	spawn_manager.spawn_all_units(episode_manager.get_spawn_sides_swapped())
+	# Spawn all units using spawn manager with policy assignments
+	spawn_manager.spawn_all_units(episode_manager.get_spawn_sides_swapped(), ally_policy, enemy_policy)
 	print("Game: init_units() completed")
 
 func get_units():
@@ -183,6 +189,11 @@ func _physics_process(_delta: float) -> void:
 				obs_ally_base,
 				obs_enemy_base
 			)
+
+			# Check if any policy changed this step (triggers episode reset in Python)
+			obs["policy_changed"] = _any_policy_changed()
+			_clear_all_policy_changed_flags()
+
 			AiServer.send_observation(obs)
 
 			var game_won = (enemies_alive == 0 and allies_alive > 0) or enemy_base_destroyed
@@ -279,3 +290,35 @@ func _ai_request_reset() -> void:
 func _on_area_selected(object):
 	"""Handle area selection by delegating to PlayerController."""
 	player_controller.handle_area_selection(object)
+
+# Policy change detection for episode reset
+func _any_policy_changed() -> bool:
+	"""Check if any unit had its policy changed this step (via UI)."""
+	for unit in get_tree().get_nodes_in_group("units"):
+		if unit.policy_changed_this_step:
+			return true
+	return false
+
+func _clear_all_policy_changed_flags() -> void:
+	"""Clear policy change flags after processing."""
+	for unit in get_tree().get_nodes_in_group("units"):
+		unit.clear_policy_changed_flag()
+
+func _ai_send_current_observation() -> void:
+	"""
+	Send current game state as observation without resetting.
+	Used for soft resets when policy changes - preserves unit positions, HP, etc.
+	"""
+	var all_units = get_tree().get_nodes_in_group("units")
+	var obs_ally_base = ally_base if is_instance_valid(ally_base) else null
+	var obs_enemy_base = enemy_base if is_instance_valid(enemy_base) else null
+
+	var obs = observation_builder.build_observation(
+		ai_step,
+		tick,
+		all_units,
+		obs_ally_base,
+		obs_enemy_base
+	)
+	obs["policy_changed"] = false  # Clear flag for new episode
+	AiServer.send_observation(obs)

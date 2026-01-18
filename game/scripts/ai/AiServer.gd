@@ -69,6 +69,14 @@ func _handle_message(_peer: StreamPeerTCP, msg: Dictionary) -> void:
 				var game = game_nodes[0]
 				if game.has_method("_ai_request_reset"):
 					game._ai_request_reset()
+		"_ai_request_observation":
+			# Soft reset: send current state without resetting game
+			print("AiServer: got OBSERVATION REQUEST (soft reset)")
+			var game_nodes = get_tree().get_nodes_in_group("game")
+			if game_nodes.size() > 0:
+				var game = game_nodes[0]
+				if game.has_method("_ai_send_current_observation"):
+					game._ai_send_current_observation()
 		"act":
 			var actions_any: Variant = msg.get("actions", {})
 			var actions: Dictionary = actions_any as Dictionary

@@ -17,8 +17,13 @@ var max_episode_steps: int
 # Spawn side alternation for position-invariant learning
 var swap_spawn_sides: bool = false
 
+# Matchup rotation for balanced training
+var matchup_rotation: Array = []  # List of [ally_policy, enemy_policy] pairs
+var current_matchup_index: int = 0
+
 func _init(p_max_episode_steps: int):
 	max_episode_steps = p_max_episode_steps
+	_load_matchup_rotation()
 
 func should_end_episode(ai_step: int, game_won: bool, game_lost: bool) -> bool:
 	"""
@@ -89,6 +94,12 @@ func request_reset(
 	episode_count += 1
 	swap_spawn_sides = (episode_count % 2 == 1)  # Swap on odd episodes
 
+	# Get next matchup for balanced training
+	var matchup = _get_next_matchup()
+	var ally_policy = matchup[0]
+	var enemy_policy = matchup[1]
+	print("EpisodeManager: Next matchup - allies: ", ally_policy, ", enemies: ", enemy_policy)
+
 	# Remove all existing bases
 	if ally_base_ref[0] and is_instance_valid(ally_base_ref[0]):
 		ally_base_ref[0].queue_free()
@@ -116,7 +127,7 @@ func request_reset(
 	ally_base_ref[0] = bases["ally_base"]
 	enemy_base_ref[0] = bases["enemy_base"]
 
-	spawn_manager.spawn_all_units(swap_spawn_sides)
+	spawn_manager.spawn_all_units(swap_spawn_sides, ally_policy, enemy_policy)
 
 	# Refresh units list in game node
 	game_node.get_units()
@@ -156,3 +167,66 @@ func get_episode_info() -> Dictionary:
 func get_spawn_sides_swapped() -> bool:
 	"""Check if spawn sides are currently swapped."""
 	return swap_spawn_sides
+
+func get_first_matchup() -> Array:
+	"""
+	Get the first matchup for episode 0.
+	Called from Game._ready() before spawning initial units.
+	Returns: [ally_policy, enemy_policy]
+	"""
+	return _get_next_matchup()
+
+func _load_matchup_rotation() -> void:
+	"""
+	Load policy matchups from JSON and generate round-robin rotation.
+
+	Creates all possible policy vs policy matchups (including self-play)
+	ensuring each policy plays against every other equally on both sides.
+	"""
+	var config_path = "res://config/ai_policies.json"
+	var file = FileAccess.open(config_path, FileAccess.READ)
+
+	if not file:
+		push_error("Failed to load ai_policies.json for matchup rotation")
+		return
+
+	var json = JSON.new()
+	var error = json.parse(file.get_as_text())
+	file.close()
+
+	if error != OK:
+		push_error("Failed to parse ai_policies.json: " + json.get_error_message())
+		return
+
+	var data = json.data
+	var policies = data.get("policies", {})
+
+	# Get all trainable policies
+	var trainable_policies = []
+	for policy_id in policies.keys():
+		if policies[policy_id].get("trainable", true):
+			trainable_policies.append(policy_id)
+
+	# Generate all pairwise matchups (including self-play)
+	for ally_policy in trainable_policies:
+		for enemy_policy in trainable_policies:
+			matchup_rotation.append([ally_policy, enemy_policy])
+
+	print("EpisodeManager: Loaded ", matchup_rotation.size(), " matchups for rotation")
+	print("  Trainable policies: ", trainable_policies.size())
+	print("  Matchups per policy: ", matchup_rotation.size() / trainable_policies.size() if trainable_policies.size() > 0 else 0)
+
+func _get_next_matchup() -> Array:
+	"""
+	Get the next matchup in the rotation and advance the index.
+
+	Returns: [ally_policy, enemy_policy]
+	"""
+	if matchup_rotation.is_empty():
+		push_error("No matchups available in rotation!")
+		return ["policy_baseline", "policy_baseline"]
+
+	var matchup = matchup_rotation[current_matchup_index % matchup_rotation.size()]
+	current_matchup_index += 1
+	return matchup
+

@@ -84,9 +84,10 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     Godot's unit.set_policy("policy_name") method.
 
     Priority:
-    1. Try to read from worker's environment agent_to_policy mapping (most reliable)
-    2. Try to read policy_id from episode info (for mid-episode switches)
-    3. Fall back to default_policy from JSON config
+    1. Try to get from worker's environment directly (most reliable, same process)
+    2. Try to read from class-level global mapping (backup)
+    3. Try to read policy_id from episode info
+    4. Fall back to default_policy from JSON config
 
     Args:
         agent_id: Unit identifier (e.g., "u25", "u87")
@@ -96,23 +97,62 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     Returns:
         str: Policy ID from JSON config
     """
-    # DEBUG: Track first few calls to understand what's happening
-    global _policy_mapping_debug_count
-    if '_policy_mapping_debug_count' not in globals():
-        _policy_mapping_debug_count = 0
+    # DEBUG: Log ALL calls to understand the flow
+    global _policy_mapping_call_count
+    if '_policy_mapping_call_count' not in globals():
+        _policy_mapping_call_count = 0
+    _policy_mapping_call_count += 1
 
-    # Method 1: Try to get from environment's global agent_to_policy mapping
-    # The environment stores this as a class variable that's shared across calls
+    # Log every 1000th call to see if this function is being called at all
+    if _policy_mapping_call_count <= 10 or _policy_mapping_call_count % 1000 == 0:
+        print(f"DEBUG policy_mapping_fn called #{_policy_mapping_call_count}: agent={agent_id}, worker={worker is not None}, episode={episode is not None}")
+
+    from godot_multi_env import GodotRTSMultiAgentEnv
+
+    # Method 1: Try to get from worker's environment directly (most reliable)
+    # This accesses the actual env instance in the same process
+    if worker is not None:
+        try:
+            # Try different ways to access the environment from worker
+            env = None
+            if hasattr(worker, 'env'):
+                env = worker.env
+            elif hasattr(worker, 'async_env'):
+                env = worker.async_env
+            elif hasattr(worker, 'env_runner') and hasattr(worker.env_runner, 'env'):
+                env = worker.env_runner.env
+
+            if env is not None:
+                # Handle vectorized envs
+                if hasattr(env, 'envs') and len(env.envs) > 0:
+                    env = env.envs[0]
+                if hasattr(env, 'env'):
+                    env = env.env
+
+                if hasattr(env, 'agent_to_policy') and agent_id in env.agent_to_policy:
+                    policy_id = env.agent_to_policy[agent_id]
+                    if policy_id in POLICIES:
+                        if _policy_mapping_call_count < 5:
+                            print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from worker env)")
+                            _policy_mapping_call_count += 1
+                        # Update class-level tracking
+                        GodotRTSMultiAgentEnv._last_policy_mapping[agent_id] = policy_id
+                        return policy_id
+        except Exception as e:
+            if _policy_mapping_call_count < 5:
+                print(f"DEBUG policy_mapping_fn: worker access failed: {e}")
+
+    # Method 2: Try to get from environment's global agent_to_policy mapping
+    # This works when policy_mapping_fn runs in same process as env
     try:
-        from godot_multi_env import GodotRTSMultiAgentEnv
         if hasattr(GodotRTSMultiAgentEnv, '_agent_to_policy_global'):
             agent_to_policy = GodotRTSMultiAgentEnv._agent_to_policy_global
             if agent_id in agent_to_policy:
                 policy_id = agent_to_policy[agent_id]
                 if policy_id in POLICIES:
-                    if _policy_mapping_debug_count < 5:
+                    if _policy_mapping_call_count < 5:
                         print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from global mapping)")
-                        _policy_mapping_debug_count += 1
+                        _policy_mapping_call_count += 1
 
                     # Store what we're returning so environment can verify it
                     if not hasattr(GodotRTSMultiAgentEnv, '_last_policy_mapping'):
@@ -123,7 +163,7 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     except (ImportError, AttributeError, KeyError, TypeError) as e:
         pass
 
-    # Method 2: Try to get policy from episode info (for mid-episode switches)
+    # Method 3: Try to get policy from episode info (for mid-episode switches)
     if episode is not None:
         try:
             info = None
@@ -138,21 +178,20 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
             if info and "policy_id" in info:
                 policy_id = info["policy_id"]
                 if policy_id in POLICIES:
-                    if _policy_mapping_debug_count < 5:
+                    if _policy_mapping_call_count < 5:
                         print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from episode info)")
-                        _policy_mapping_debug_count += 1
+                        _policy_mapping_call_count += 1
                     return policy_id
         except (AttributeError, KeyError, TypeError) as e:
             pass
 
-    # Method 3: Fallback to default policy from config
-    if _policy_mapping_debug_count < 5:
+    # Method 4: Fallback to default policy from config
+    if _policy_mapping_call_count < 5:
         print(f"DEBUG policy_mapping_fn: {agent_id} -> fallback to default ({policy_manager.default_policy})")
-        _policy_mapping_debug_count += 1
+        _policy_mapping_call_count += 1
 
     # Store the fallback policy
     try:
-        from godot_multi_env import GodotRTSMultiAgentEnv
         if not hasattr(GodotRTSMultiAgentEnv, '_last_policy_mapping'):
             GodotRTSMultiAgentEnv._last_policy_mapping = {}
         GodotRTSMultiAgentEnv._last_policy_mapping[agent_id] = policy_manager.default_policy
@@ -279,7 +318,7 @@ if __name__ == "__main__":
     # Checkpoint loading configuration
     # Priority: latest numbered checkpoint > checkpoint_3policy > train from scratch
     # IMPORTANT: Set to True when policy configuration changes (policy names/count)
-    skip_checkpoint_loading = True  # Set to False to load from checkpoint (policies must match!)
+    skip_checkpoint_loading = False  # Set to False to load from checkpoint (policies must match!)
 
     # Determine which checkpoint to load
     checkpoint_to_load = None
@@ -306,7 +345,7 @@ if __name__ == "__main__":
         print(f"Restoring from checkpoint: {checkpoint_to_load}")
         try:
             algo.restore(checkpoint_to_load)
-            print("✓ Algorithm restored successfully!")
+            print("[OK] Algorithm restored successfully!")
             print(f"  Loaded 3 policies: LT50, GT50, frontline")
 
             # Manually update all training hyperparameters post-restore
@@ -348,13 +387,13 @@ if __name__ == "__main__":
                             learner._hps.vf_clip_param = VF_CLIP_PARAM
                             learner._hps.lambda_ = GAE_LAMBDA
 
-                print("  ✓ Hyperparameters updated successfully!")
+                print("  [OK] Hyperparameters updated successfully!")
             except Exception as e:
-                print(f"  ⚠ WARNING: Could not fully update hyperparameters: {e}")
+                print(f"  [!] WARNING: Could not fully update hyperparameters: {e}")
                 print(f"    Training will attempt to continue anyway...")
 
         except Exception as e:
-            print(f"✗ WARNING: Failed to restore checkpoint: {e}")
+            print(f"[X] WARNING: Failed to restore checkpoint: {e}")
             print("  Continuing with fresh algorithm...")
     else:
         print("No checkpoint to restore - training from scratch")
