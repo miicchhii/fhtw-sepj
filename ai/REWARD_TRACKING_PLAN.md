@@ -254,7 +254,7 @@ class RewardTrackingCallback(DefaultCallbacks):
 
 ### Step 5: Integrate Callback into Training Script (15 minutes)
 
-**File**: `ai/train_rllib_ppo_simple.py`
+**File**: `ai/training_server.py`
 
 **Add import**:
 ```python

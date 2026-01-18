@@ -158,41 +158,136 @@ def run_inference_loop(algo, env, policy_manager):
     obs, info = env.reset()
     print(f"Episode {episode_count + 1} started with {len(obs)} agents")
 
+    import time
+
+    # Track if we just transitioned from 0 agents (need special handling)
+    just_got_first_agents = False
+    zero_agent_poll_count = 0
+
     while True:
+        # Handle 0-agent case: poll until units are spawned
+        if len(obs) == 0:
+            zero_agent_poll_count += 1
+            time.sleep(2.0)  # Wait longer for units to spawn (reduce CPU)
+
+            # Every 5 polls, do a full reset to resync state
+            if zero_agent_poll_count % 5 == 0:
+                print(f"Polling for units... ({zero_agent_poll_count} attempts)")
+                try:
+                    obs, info = env.reset()  # Full reset
+                except Exception as e:
+                    print(f"Reset failed: {e}")
+            else:
+                try:
+                    obs, info = env.reset(soft=True)  # Soft poll
+                except Exception as e:
+                    pass  # Silent fail for soft polls
+
+            if len(obs) > 0:
+                print(f"Units detected: {len(obs)} agents now active")
+                just_got_first_agents = True
+                zero_agent_poll_count = 0
+                time.sleep(1.0)  # Brief pause to let Godot sync
+            continue
+
+        # Small sleep between steps to avoid hammering CPU
+        time.sleep(0.1)
+
         # Compute actions for all agents
         actions = {}
         for agent_id, agent_obs in obs.items():
-            # Get policy for this agent
-            policy_id = env.agent_to_policy.get(agent_id, policy_manager.default_policy)
+            try:
+                # Get policy for this agent
+                policy_id = env.agent_to_policy.get(agent_id, policy_manager.default_policy)
 
-            # Convert observation to tensor
-            obs_tensor = torch.tensor(agent_obs, dtype=torch.float32).unsqueeze(0)
+                # Validate observation
+                if agent_obs is None or len(agent_obs) == 0:
+                    print(f"Warning: Empty observation for agent {agent_id}, using zero action")
+                    actions[agent_id] = np.zeros(2, dtype=np.float32)
+                    continue
 
-            # Compute action using the RLModule
-            if policy_id in rl_modules:
-                module = rl_modules[policy_id]
-                with torch.no_grad():
-                    # Forward pass through the module
-                    input_dict = {"obs": obs_tensor}
-                    output = module.forward_inference(input_dict)
-                    # Extract action from output (deterministic = use mean)
-                    if "action_dist_inputs" in output:
-                        # For continuous actions, first half is mean, second half is log_std
-                        action_dist_inputs = output["action_dist_inputs"]
-                        action = action_dist_inputs[0, :2].numpy()  # Take mean (first 2 values)
-                    elif "actions" in output:
-                        action = output["actions"][0].numpy()
-                    else:
-                        # Fallback: sample from distribution
-                        action = np.zeros(2, dtype=np.float32)
-            else:
-                # Fallback: random action
-                action = np.zeros(2, dtype=np.float32)
+                # Convert observation to tensor
+                obs_tensor = torch.tensor(agent_obs, dtype=torch.float32).unsqueeze(0)
 
-            actions[agent_id] = action
+                # Compute action using the RLModule
+                if policy_id in rl_modules:
+                    module = rl_modules[policy_id]
+                    with torch.no_grad():
+                        # Forward pass through the module
+                        input_dict = {"obs": obs_tensor}
+                        output = module.forward_inference(input_dict)
+                        # Extract action from output (deterministic = use mean)
+                        if "action_dist_inputs" in output:
+                            # For continuous actions, first half is mean, second half is log_std
+                            action_dist_inputs = output["action_dist_inputs"]
+                            action = action_dist_inputs[0, :2].numpy()  # Take mean (first 2 values)
+                        elif "actions" in output:
+                            action = output["actions"][0].numpy()
+                        else:
+                            # Fallback: zero action
+                            action = np.zeros(2, dtype=np.float32)
+                else:
+                    # Fallback: zero action for unknown policy
+                    action = np.zeros(2, dtype=np.float32)
 
-        # Step environment
-        obs, rewards, terminateds, truncateds, infos = env.step(actions)
+                actions[agent_id] = action
+
+            except Exception as e:
+                print(f"Warning: Failed to compute action for agent {agent_id}: {e}")
+                actions[agent_id] = np.zeros(2, dtype=np.float32)
+
+        # Step environment with retry logic
+        max_step_retries = 3 if just_got_first_agents else 2
+        step_success = False
+
+        for retry in range(max_step_retries):
+            try:
+                obs, rewards, terminateds, truncateds, infos = env.step(actions)
+                step_success = True
+                just_got_first_agents = False  # Clear flag after successful step
+                break
+            except (RuntimeError, KeyError, ValueError) as e:
+                print(f"Step failed (attempt {retry + 1}/{max_step_retries}): {e}")
+                time.sleep(0.5)
+                # Try soft reset to resync
+                try:
+                    obs, info = env.reset(soft=True)
+                    if len(obs) > 0:
+                        # Recompute actions with new observations
+                        actions = {}
+                        for agent_id, agent_obs in obs.items():
+                            policy_id = env.agent_to_policy.get(agent_id, policy_manager.default_policy)
+                            obs_tensor = torch.tensor(agent_obs, dtype=torch.float32).unsqueeze(0)
+                            if policy_id in rl_modules:
+                                module = rl_modules[policy_id]
+                                with torch.no_grad():
+                                    input_dict = {"obs": obs_tensor}
+                                    output = module.forward_inference(input_dict)
+                                    if "action_dist_inputs" in output:
+                                        action = output["action_dist_inputs"][0, :2].numpy()
+                                    elif "actions" in output:
+                                        action = output["actions"][0].numpy()
+                                    else:
+                                        action = np.zeros(2, dtype=np.float32)
+                            else:
+                                action = np.zeros(2, dtype=np.float32)
+                            actions[agent_id] = action
+                except Exception as reset_err:
+                    print(f"Soft reset also failed: {reset_err}")
+
+        # If step failed, try a full reset instead of crashing
+        if not step_success:
+            print("Step failed after retries, performing full reset...")
+            try:
+                obs, info = env.reset()
+                print(f"Full reset complete, {len(obs)} agents")
+                step_count = 0
+                continue  # Skip to next iteration
+            except Exception as e:
+                print(f"Full reset failed: {e}, will retry next iteration")
+                time.sleep(1.0)
+                continue
+
         step_count += 1
 
         # Check for episode end
@@ -208,9 +303,19 @@ def run_inference_loop(algo, env, policy_manager):
 
             step_count = 0
 
-            # Reset immediately (no training delay!)
-            obs, info = env.reset()
-            print(f"Episode {episode_count + 1} started with {len(obs)} agents")
+            # Reset immediately (no training delay!) with error handling
+            try:
+                obs, info = env.reset()
+                print(f"Episode {episode_count + 1} started with {len(obs)} agents")
+            except Exception as e:
+                print(f"Reset after episode end failed: {e}, will retry...")
+                time.sleep(1.0)
+                try:
+                    obs, info = env.reset()
+                    print(f"Episode {episode_count + 1} started with {len(obs)} agents (after retry)")
+                except Exception as e2:
+                    print(f"Reset retry failed: {e2}, continuing with empty obs")
+                    obs = {}
 
 
 def detect_gpu_available() -> bool:
@@ -243,7 +348,10 @@ def main():
         action="store_true",
         help="Force CPU inference"
     )
-    args = parser.parse_args()
+    # Use parse_known_args to ignore IDE debugger arguments (e.g., --mode=client --host=... --port=...)
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        print(f"Note: Ignoring unrecognized arguments (likely from IDE): {unknown}")
 
     # Determine GPU usage: explicit flag > auto-detect
     if args.cpu and args.gpu:

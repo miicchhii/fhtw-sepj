@@ -13,6 +13,10 @@ class_name EpisodeManager
 var episode_count: int = 0
 var episode_ended: bool = false
 var max_episode_steps: int
+var max_steps_without_damage: int
+
+# Damage tracking for early termination
+var steps_without_damage: int = 0
 
 # Spawn side alternation for position-invariant learning
 var swap_spawn_sides: bool = false
@@ -21,29 +25,51 @@ var swap_spawn_sides: bool = false
 var matchup_rotation: Array = []  # List of [ally_policy, enemy_policy] pairs
 var current_matchup_index: int = 0
 
-func _init(p_max_episode_steps: int):
+func _init(p_max_episode_steps: int, p_max_steps_without_damage: int = GameConfig.MAX_STEPS_WITHOUT_DAMAGE):
 	max_episode_steps = p_max_episode_steps
+	max_steps_without_damage = p_max_steps_without_damage
 	_load_matchup_rotation()
 
-func should_end_episode(ai_step: int, game_won: bool, game_lost: bool) -> bool:
+func should_end_episode(ai_step: int, game_won: bool, game_lost: bool, training_mode: bool = true, damage_this_step: bool = false) -> bool:
 	"""
 	Check if the current episode should terminate.
 
 	Episode termination conditions:
-	- ai_step >= max_episode_steps (timeout)
+	- ai_step >= max_episode_steps (timeout) - TRAINING MODE ONLY
+	- No damage dealt for max_steps_without_damage steps - TRAINING MODE ONLY
 	- All allies dead (game lost)
 	- All enemies dead (game won)
 	- Base destroyed (immediate win/loss)
+
+	In inference mode, there is no timeout - the game continues until
+	a base is destroyed or all units on one side are eliminated.
 
 	Args:
 		ai_step: Current AI step counter
 		game_won: Whether allies won this step
 		game_lost: Whether allies lost this step
+		training_mode: If true, apply step timeout; if false, no timeout
+		damage_this_step: Whether any damage was dealt this step (resets no-damage counter)
 
 	Returns:
 		True if episode should end, False otherwise
 	"""
-	return (ai_step >= max_episode_steps) or game_won or game_lost
+	# Track steps without damage (only in training mode)
+	if training_mode:
+		if damage_this_step:
+			steps_without_damage = 0
+		else:
+			steps_without_damage += 1
+
+	# Timeout only applies in training mode (to prevent stuck learning)
+	var timeout = training_mode and (ai_step >= max_episode_steps)
+
+	# No-damage timeout only applies in training mode (units are stuck/not fighting)
+	var no_damage_timeout = training_mode and (steps_without_damage >= max_steps_without_damage)
+	if no_damage_timeout and not timeout:
+		print("EpisodeManager: No damage for ", steps_without_damage, " steps - ending episode early")
+
+	return timeout or no_damage_timeout or game_won or game_lost
 
 func mark_episode_ended() -> void:
 	"""Mark the current episode as ended (prevents multiple end signals)."""
@@ -90,6 +116,7 @@ func request_reset(
 
 	# Reset flags
 	episode_ended = false
+	steps_without_damage = 0
 
 	# Increment episode count and alternate spawn sides
 	episode_count += 1

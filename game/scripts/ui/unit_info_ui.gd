@@ -209,7 +209,8 @@ func _build_ui() -> void:
 	for policy_id in available_policies:
 		var display_name = policy_display_names.get(policy_id, policy_id)
 		_policy_dropdown.add_item(display_name)
-	_policy_dropdown.item_selected.connect(_on_policy_selected)
+	# Use popup's id_pressed to handle re-selection of same item
+	_policy_dropdown.get_popup().id_pressed.connect(_on_policy_pressed)
 	root.add_child(_policy_dropdown)
 
 	# start hidden until a unit is selected
@@ -277,6 +278,28 @@ func _update(u: Node) -> void:
 					break
 
 		(_value_labels[nice] as Label).text = shown
+
+	# Sync dropdown to show the unit's actual policy
+	_sync_dropdown_to_selection(all_selected)
+
+
+func _sync_dropdown_to_selection(units: Array) -> void:
+	"""Update dropdown selection to match the selected units' actual policy."""
+	if units.is_empty():
+		return
+
+	var policies = get_unique_policies(units)
+
+	if policies.size() == 1:
+		# Single policy - select it in dropdown
+		var policy_id = policies[0]
+		var idx = available_policies.find(policy_id)
+		if idx >= 0 and _policy_dropdown.selected != idx:
+			_policy_dropdown.select(idx)
+	else:
+		# Mixed or no policies - deselect (show first item but don't highlight)
+		# We can't truly "deselect" an OptionButton, so just leave it as-is
+		pass
 
 
 func _pretty_unit_name(u: Node) -> String:
@@ -384,8 +407,9 @@ func _format_policy_name(policy_id: String) -> String:
 		return policy_id.substr(7)  # Remove "policy_" prefix
 	return policy_id
 
-func _on_policy_selected(index: int) -> void:
-	"""Handle policy selection from dropdown - applies to ALL selected units"""
+func _on_policy_pressed(index: int) -> void:
+	"""Handle policy selection from dropdown - applies to ALL selected units.
+	Uses id_pressed signal so it fires even when re-selecting the same item."""
 	if index < 0 or index >= available_policies.size():
 		return
 
@@ -394,6 +418,9 @@ func _on_policy_selected(index: int) -> void:
 
 	if units.is_empty():
 		return
+
+	# Update the dropdown visual to show selected item
+	_policy_dropdown.select(index)
 
 	# Apply policy to all selected units
 	for unit in units:

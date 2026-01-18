@@ -2,6 +2,7 @@ extends Node
 
 var Uranium = 0
 var Metal = 0
+var EnemyMetal = 0
 var next_unit_id = 1
 
 signal selected_unit_changed(u: Node)
@@ -29,6 +30,7 @@ func reset() -> void:
 	# Reset game-wide state to initial values
 	Uranium = 0
 	Metal = 0
+	EnemyMetal = 0
 	next_unit_id = 1
 	SelectedUnit = null
 

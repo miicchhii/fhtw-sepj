@@ -12,6 +12,10 @@
 extends CharacterBody2D
 class_name RTSUnit
 
+# Behavior modes for meta-AI control
+enum BehaviorMode { NEUTRAL, DEFENSIVE, AGGRO_1, AGGRO_2 }
+var behavior_mode: BehaviorMode = BehaviorMode.NEUTRAL
+
 # Faction assignment
 @export var is_enemy: bool = false   # True for enemies, False for allies
 
@@ -403,3 +407,59 @@ func _pick_ally_base_in_range(radius: float) -> Node:
 			if d <= radius:
 				return base
 	return null
+
+# Behavior mode support for meta-AI control
+func set_behavior_mode(mode: BehaviorMode) -> void:
+	"""Set the unit's behavior mode (used by EnemyMetaAI)."""
+	behavior_mode = mode
+
+func get_behavior_target() -> Vector2:
+	"""
+	Get the target position based on behavior mode.
+	Used as movement objective for AI-controlled units.
+	"""
+	match behavior_mode:
+		BehaviorMode.DEFENSIVE:
+			# Stay near own base
+			return _get_own_base_position()
+		BehaviorMode.AGGRO_1:
+			# Move toward nearest enemy unit
+			return _get_nearest_enemy_position()
+		BehaviorMode.AGGRO_2:
+			# Move toward enemy base
+			return _get_enemy_base_position()
+		_:
+			# NEUTRAL: no specific target, stay at current position
+			return position
+
+func _get_own_base_position() -> Vector2:
+	"""Get position of this unit's team base."""
+	var base_group = "enemy_base" if is_enemy else "ally_base"
+	var bases = get_tree().get_nodes_in_group(base_group)
+	if bases.size() > 0 and is_instance_valid(bases[0]):
+		return bases[0].global_position
+	return position
+
+func _get_enemy_base_position() -> Vector2:
+	"""Get position of the opposing team's base."""
+	var base_group = "ally_base" if is_enemy else "enemy_base"
+	var bases = get_tree().get_nodes_in_group(base_group)
+	if bases.size() > 0 and is_instance_valid(bases[0]):
+		return bases[0].global_position
+	return position
+
+func _get_nearest_enemy_position() -> Vector2:
+	"""Get position of nearest enemy (from this unit's perspective)."""
+	var enemy_group = "ally" if is_enemy else "enemy"
+	var enemies = get_tree().get_nodes_in_group(enemy_group)
+	var nearest_pos = position
+	var nearest_dist = INF
+
+	for enemy in enemies:
+		if is_instance_valid(enemy):
+			var dist = position.distance_to(enemy.global_position)
+			if dist < nearest_dist:
+				nearest_dist = dist
+				nearest_pos = enemy.global_position
+
+	return nearest_pos

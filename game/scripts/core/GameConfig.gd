@@ -28,7 +28,8 @@ const PHYSICS_FPS: int = 60        # Expected physics framerate
 # EPISODE MANAGEMENT
 # =============================================================================
 
-const MAX_EPISODE_STEPS: int = 500  # Maximum AI steps before episode auto-terminates
+const MAX_EPISODE_STEPS: int = 1000  # Maximum AI steps before episode auto-terminates (training only)
+const MAX_STEPS_WITHOUT_DAMAGE: int = 250  # End episode if no damage dealt for this many steps (training only)
 
 # =============================================================================
 # UNIT CONFIGURATION
