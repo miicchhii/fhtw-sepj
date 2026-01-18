@@ -228,14 +228,39 @@ func _buy(unit_type: int, cost: int) -> void:
 
 
 func _get_spawn_position() -> Vector2:
-	# find first Node2D in group 'Roboshop'
+	# Find the player's shop by finding the shop closest to the ally base
 	var center: Vector2 = Vector2.ZERO
-	for n in get_tree().get_nodes_in_group("Roboshop"):
+
+	# First, find the ally base position
+	var ally_bases = get_tree().get_nodes_in_group("ally_base")
+	if ally_bases.is_empty():
+		print("Warning: No ally base found, using screen center")
+		return get_viewport().get_visible_rect().size / 2.0
+
+	var ally_base_pos: Vector2 = (ally_bases[0] as Node2D).global_position
+	print("Ally base at: ", ally_base_pos)
+
+	# Find the shop closest to the ally base
+	var all_shops = get_tree().get_nodes_in_group("Roboshop")
+	print("Found ", all_shops.size(), " shops in Roboshop group")
+
+	var closest_shop: Node2D = null
+	var closest_dist: float = INF
+
+	for n in all_shops:
 		if n is Node2D:
-			center = (n as Node2D).global_position
-			break
-	if center == Vector2.ZERO:
-		# fallback: center of screen
+			var shop_pos: Vector2 = (n as Node2D).global_position
+			var dist: float = shop_pos.distance_to(ally_base_pos)
+			print("  Shop: ", n.name, " pos=", shop_pos, " dist_to_ally_base=", dist)
+			if dist < closest_dist:
+				closest_dist = dist
+				closest_shop = n as Node2D
+
+	if closest_shop:
+		center = closest_shop.global_position
+		print("  -> Using closest shop at ", center)
+	else:
+		print("Warning: No shops found, using screen center")
 		return get_viewport().get_visible_rect().size / 2.0
 
 	# try a few random spots in an annulus around the shop
