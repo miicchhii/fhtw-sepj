@@ -32,6 +32,12 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
     - Position-invariant learning: Velocity-based observations prevent position-specific strategies
     """
 
+    # Class-level shared dicts for policy mapping - NEVER replaced, only updated in place
+    # This ensures policy_mapping_fn always reads from the same dict regardless of which
+    # environment instance last updated it
+    _agent_to_policy_global = {}  # Maps agent_id -> policy_id from Godot observations
+    _last_policy_mapping = {}     # Maps agent_id -> policy_id returned by policy_mapping_fn
+
     def __init__(self, env_config: Dict[str, Any]):
         super().__init__()
         # TCP connection configuration (use central config defaults)
@@ -49,13 +55,9 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         self.possible_agents = POSSIBLE_AGENT_IDS  # All possible unit IDs from config
         self.last_obs = {}  # Cache of last observation for each agent
 
-        # Multi-policy support: Track which policy each unit is assigned to
-        # Updated from Godot observations each step
-        # IMPORTANT: This is also set as a class variable so policy_mapping_fn can access it
-        self.agent_to_policy = {}  # Maps agent_id -> policy_id (e.g., "u25" -> "policy_LT50")
-
-        # Store as class variable for access from policy_mapping_fn
-        GodotRTSMultiAgentEnv._agent_to_policy_global = self.agent_to_policy
+        # Multi-policy support: Point to class-level shared dict
+        # All instances share the same dict so policy_mapping_fn always sees latest data
+        self.agent_to_policy = GodotRTSMultiAgentEnv._agent_to_policy_global
 
         # Episode state
         self.episode_step = 0
@@ -254,8 +256,10 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
 
             # Extract and store policy assignment from Godot
             # This enables dynamic policy switching - unit can change policy via set_policy()
-            policy_id = unit.get("policy_id", "policy_LT50")
+            policy_id = unit.get("policy_id", "policy_baseline")
             self.agent_to_policy[agent_id] = policy_id
+            # Note: self.agent_to_policy IS the class-level _agent_to_policy_global dict
+            # Updates here are automatically visible to policy_mapping_fn
 
             # Convert unit data to normalized observation vector
             velocity = unit.get("velocity", [0.0, 0.0])
@@ -502,9 +506,11 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                     actual_policy = getattr(GodotRTSMultiAgentEnv, '_last_policy_mapping', {}).get(agent_id, "unknown")
                     expected_policy = self.agent_to_policy.get(agent_id, "unknown")
 
-                    # Warn if mismatch between expected and actual
+                    # Note: A mismatch here is expected when policy changes mid-episode
+                    # actual_policy = policy used for THIS step's action (from previous observation)
+                    # expected_policy = policy from CURRENT observation (will be used next step)
                     if actual_policy != expected_policy and actual_policy != "unknown":
-                        print(f"Agent {agent_id} [EXPECTED:{expected_policy} ACTUAL:{actual_policy}] reward: {reward:.2f}")
+                        print(f"Agent {agent_id} policy change pending: {actual_policy} -> {expected_policy} (reward: {reward:.2f})")
                     else:
                         print(f"Agent {agent_id} ({actual_policy}) received significant reward: {reward:.2f}")
 
