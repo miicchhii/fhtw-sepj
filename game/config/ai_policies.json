@@ -5,7 +5,7 @@
 	"policies": {
 		"policy_aggressive_1": {
 			"description": "Rushes enemy base aggressively with high damage focus",
-			"display_name": "Aggressive Alpha",
+			"display_name": "Aggressive 1",
 			"network_config": {
 				"fcnet_activation": "tanh",
 				"fcnet_hiddens": [
@@ -35,7 +35,7 @@
 		},
 		"policy_aggressive_2": {
 			"description": "Alternative aggressive strategy emphasizing unit kills",
-			"display_name": "Aggressive Beta",
+			"display_name": "Hunter",
 			"network_config": {
 				"fcnet_activation": "tanh",
 				"fcnet_hiddens": [
@@ -114,9 +114,9 @@
 				"death": -5.0,
 				"movement_continue_straight": 1,
 				"movement_reverse_direction": -1.5,
-				"proximity_to_ally_base_multiplier": 2.0,
+				"proximity_to_ally_base_multiplier": 3.0,
 				"proximity_to_enemy_base_multiplier": 0.5,
-				"tactical_spacing": -1.5,
+				"tactical_spacing": -1,
 				"team_defeat": -25.0,
 				"team_victory": 50.0,
 				"unit_kill": 15.0
@@ -144,7 +144,7 @@
 				"death": -5.0,
 				"movement_continue_straight": 1.0,
 				"movement_reverse_direction": -2.0,
-				"proximity_to_ally_base_multiplier": 2.5,
+				"proximity_to_ally_base_multiplier": 4.5,
 				"proximity_to_enemy_base_multiplier": 0.3,
 				"tactical_spacing": -2.0,
 				"team_defeat": -25.0,

@@ -26,7 +26,14 @@ var lbl_inf_cost: Label
 var lbl_snp_cost: Label
 var lbl_hvy_cost: Label
 
+# Policy selection
+var _policy_dropdown: OptionButton
+var _available_policies: Array = []
+var _policy_display_names: Dictionary = {}
+var _selected_policy: String = ""
+
 func _ready() -> void:
+	_load_available_policies()
 	_build_ui()
 	_style_buttons()
 	_connect_signals()
@@ -34,6 +41,39 @@ func _ready() -> void:
 	_assign_icons()
 	_rng = RandomNumberGenerator.new()
 	_rng.randomize()
+
+func _load_available_policies() -> void:
+	"""Load available policies from JSON configuration"""
+	var config_path = "res://config/ai_policies.json"
+	var file = FileAccess.open(config_path, FileAccess.READ)
+
+	if not file:
+		push_error("RoboshopUI: Failed to load ai_policies.json")
+		return
+
+	var json = JSON.new()
+	var error = json.parse(file.get_as_text())
+	file.close()
+
+	if error != OK:
+		push_error("RoboshopUI: Failed to parse ai_policies.json: " + json.get_error_message())
+		return
+
+	var data = json.data
+	if not data.has("policies"):
+		push_error("RoboshopUI: Invalid ai_policies.json: missing 'policies' key")
+		return
+
+	var policies = data["policies"]
+	for policy_id in policies.keys():
+		_available_policies.append(policy_id)
+		_policy_display_names[policy_id] = policies[policy_id].get("display_name", policy_id)
+
+	# Set default policy to first available
+	if _available_policies.size() > 0:
+		_selected_policy = _available_policies[0]
+
+	print("RoboshopUI: Loaded ", _available_policies.size(), " policies")
 
 
 func _process(_dt: float) -> void:
@@ -45,20 +85,20 @@ func _process(_dt: float) -> void:
 # ---------------- UI Construction ----------------
 func _build_ui() -> void:
 	anchor_left = 1.0; anchor_top = 1.0; anchor_right = 1.0; anchor_bottom = 1.0
-	offset_left = -240; offset_top = -173; offset_right = -8; offset_bottom = -8
+	offset_left = -240; offset_top = -210; offset_right = -8; offset_bottom = -8
 	mouse_filter = Control.MOUSE_FILTER_PASS
 
 	var panel := Panel.new()
 	panel.name = "Panel"
 	panel.offset_right = 232
-	panel.offset_bottom = 170
+	panel.offset_bottom = 205
 	add_child(panel)
 
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = Color(0.1, 0.1, 0.1, 0.88)
 	sb.set_corner_radius_all(8)
 	panel.add_theme_stylebox_override("panel", sb)
-	
+
 	# container that pads the panel and stacks content vertically
 	var v := VBoxContainer.new()
 	v.anchor_right = 1.0
@@ -69,7 +109,7 @@ func _build_ui() -> void:
 	v.offset_bottom = -8
 	v.add_theme_constant_override("separation", 6)
 	panel.add_child(v)
-	
+
 	# --- Title label at the top ---
 	var title := Label.new()
 	title.text = "Construction Shop"
@@ -81,7 +121,7 @@ func _build_ui() -> void:
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(title)
 
-	
+
 	var h := HBoxContainer.new()
 	h.name = "HBox"
 	h.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -89,14 +129,36 @@ func _build_ui() -> void:
 	h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	h.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	v.add_child(h)
-	
-	
+
+
 	var legend := Label.new()
 	legend.text = "M = Metal  •  U = Uranium"
 	legend.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	legend.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	v.add_child(legend)
-	panel.custom_minimum_size = Vector2(232, 156)  # was ~132 tall; this adds room for the legend
+
+	# --- Policy selection dropdown ---
+	var policy_row := HBoxContainer.new()
+	policy_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	policy_row.add_theme_constant_override("separation", 6)
+	policy_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	v.add_child(policy_row)
+
+	var policy_label := Label.new()
+	policy_label.text = "Model:"
+	policy_label.add_theme_font_size_override("font_size", 12)
+	policy_row.add_child(policy_label)
+
+	_policy_dropdown = OptionButton.new()
+	_policy_dropdown.custom_minimum_size = Vector2(140, 0)
+	_policy_dropdown.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for policy_id in _available_policies:
+		var display_name = _policy_display_names.get(policy_id, policy_id)
+		_policy_dropdown.add_item(display_name)
+	_policy_dropdown.item_selected.connect(_on_policy_selected)
+	policy_row.add_child(_policy_dropdown)
+
+	panel.custom_minimum_size = Vector2(232, 190)
 
 	
 	
@@ -192,6 +254,11 @@ func _update_cost_labels() -> void:
 	lbl_snp_cost.text = "%d M" % cost_sniper
 	lbl_hvy_cost.text = "%d M + %d U" % [cost_heavy, uranium_heavy]
 
+func _on_policy_selected(index: int) -> void:
+	"""Handle policy selection from dropdown"""
+	if index >= 0 and index < _available_policies.size():
+		_selected_policy = _available_policies[index]
+
 func _assign_icons() -> void:
 	if icon_infantry: btn_inf.texture_normal = icon_infantry
 	if icon_sniper:   btn_snp.texture_normal = icon_sniper
@@ -223,8 +290,8 @@ func _buy(unit_type: int, cost: int) -> void:
 		Global.Uranium -= u_cost
 	print("Shop: Spent %d M%s  |  Metal=%d, Uranium=%d" %
 	[cost, (" + %d U" % u_cost) if need_u else "", Global.Metal, Global.Uranium])
-	
-	Global.spawnUnit(pos, false, unit_type)
+
+	Global.spawnUnit(pos, false, unit_type, _selected_policy)
 
 
 func _get_spawn_position() -> Vector2:
