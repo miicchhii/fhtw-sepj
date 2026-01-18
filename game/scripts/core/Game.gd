@@ -38,6 +38,7 @@ var action_handler: ActionHandler = null
 var spawn_manager: SpawnManager = null
 var episode_manager: EpisodeManager = null
 var player_controller: PlayerController = null
+var enemy_meta_ai: EnemyMetaAI = null
 
 # Reward configuration - initialized from GameConfig, can be tuned at runtime
 # Combat rewards
@@ -73,6 +74,20 @@ var tactical_spacing_threshold: float = GameConfig.TACTICAL_SPACING_THRESHOLD
 # True = training mode (rotate matchups, spawn AI units)
 # False = inference mode (fixed matchup, skip AI unit spawning)
 var training_mode: bool = true
+
+# Episode statistics tracking (for CSV logging)
+var episode_stats: Dictionary = {
+	"ally_damage_to_units": 0,
+	"enemy_damage_to_units": 0,
+	"ally_damage_to_base": 0,
+	"enemy_damage_to_base": 0,
+	"ally_policy": "",
+	"enemy_policy": "",
+	"outcome": "",  # "ally_won", "enemy_won", "timeout_max_steps", "timeout_no_damage"
+	"ally_units_left": 0,
+	"enemy_units_left": 0,
+	"episode_steps": 0
+}
 
 func _ready() -> void:
 
@@ -111,6 +126,11 @@ func _ready() -> void:
 
 	# Initialize player controller for manual control
 	player_controller = PlayerController.new(self)
+
+	# Initialize enemy meta-AI for inference mode
+	enemy_meta_ai = EnemyMetaAI.new()
+	enemy_meta_ai.set_game_node(self)
+	add_child(enemy_meta_ai)
 
 	# Spawn bases and units with assigned policies
 	var bases = spawn_manager.spawn_bases(episode_manager.get_spawn_sides_swapped())
@@ -167,6 +187,11 @@ func _physics_process(_delta: float) -> void:
 		if episode_manager.is_episode_ended():
 			return
 
+		# Run enemy meta-AI decision EVERY tick in inference mode
+		# This allows spawning even when there are no agents (0 units at game start)
+		if not training_mode and enemy_meta_ai:
+			enemy_meta_ai.evaluate_and_spawn()
+
 		# Only process AI logic when we have actions from Python
 		var action_batches = AiServer.pop_actions()
 		if action_batches.size() > 0:
@@ -214,8 +239,24 @@ func _physics_process(_delta: float) -> void:
 			var game_won = enemy_base_destroyed
 			var game_lost = ally_base_destroyed
 
+			# Check if any damage was dealt this step (for no-damage timeout in training)
+			# Also accumulate episode statistics
+			var damage_this_step = false
+			for u in all_units:
+				if u != null and is_instance_valid(u):
+					if u.damage_dealt_this_step > 0 or u.damage_to_base_this_step > 0 or u.damage_received_this_step > 0:
+						damage_this_step = true
+					# Accumulate damage stats for episode logging
+					if u.is_in_group("ally"):
+						episode_stats["ally_damage_to_units"] += u.damage_dealt_this_step
+						episode_stats["ally_damage_to_base"] += u.damage_to_base_this_step
+					else:
+						episode_stats["enemy_damage_to_units"] += u.damage_dealt_this_step
+						episode_stats["enemy_damage_to_base"] += u.damage_to_base_this_step
+
 			# Check for episode end condition using EpisodeManager
-			var should_end_episode = episode_manager.should_end_episode(ai_step, game_won, game_lost)
+			# In inference mode, there's no timeout - only win/loss conditions end the game
+			var should_end_episode = episode_manager.should_end_episode(ai_step, game_won, game_lost, training_mode, damage_this_step)
 
 			# Calculate rewards using RewardCalculator
 			# Pass null for destroyed bases to avoid "previously freed" error
@@ -237,9 +278,49 @@ func _physics_process(_delta: float) -> void:
 				if u != null and is_instance_valid(u):
 					dones[u.unit_id] = should_end_episode
 
+			# Build reward data payload
+			var reward_data = {"rewards": rewards, "dones": dones}
+
+			# If episode is ending, compile and include episode summary for CSV logging
+			if should_end_episode:
+				# Determine outcome
+				var outcome = ""
+				if game_won:
+					outcome = "ally_won"
+				elif game_lost:
+					outcome = "enemy_won"
+				elif episode_manager.steps_without_damage >= GameConfig.MAX_STEPS_WITHOUT_DAMAGE:
+					outcome = "timeout_no_damage"
+				else:
+					outcome = "timeout_max_steps"
+
+				# Get policies from first units of each team (they should all have same policy per team)
+				var ally_policy = ""
+				var enemy_policy = ""
+				for u in all_units:
+					if u != null and is_instance_valid(u):
+						if u.is_in_group("ally") and ally_policy == "":
+							ally_policy = u.policy_id
+						elif u.is_in_group("enemy") and enemy_policy == "":
+							enemy_policy = u.policy_id
+						if ally_policy != "" and enemy_policy != "":
+							break
+
+				# Finalize episode stats
+				episode_stats["outcome"] = outcome
+				episode_stats["ally_policy"] = ally_policy
+				episode_stats["enemy_policy"] = enemy_policy
+				episode_stats["ally_units_left"] = allies_alive
+				episode_stats["enemy_units_left"] = enemies_alive
+				episode_stats["episode_steps"] = ai_step
+
+				# Include in reward data
+				reward_data["episode_summary"] = episode_stats.duplicate()
+				print("Episode summary: ", episode_stats)
+
 			# CRITICAL: Send rewards immediately after observation, don't wait
 			#print("Game: Sending rewards - should_end_episode: ", should_end_episode, " dones: ", dones)
-			AiServer.send_reward(0.0, should_end_episode, {"rewards": rewards, "dones": dones})
+			AiServer.send_reward(0.0, should_end_episode, reward_data)
 
 			# Reset base damage tracking for next step (only if bases still exist)
 			if ally_base and is_instance_valid(ally_base):
@@ -279,6 +360,13 @@ func _ai_request_reset(p_training_mode: bool = true) -> void:
 	tick = 0
 	ai_step = 0
 	training_mode = p_training_mode  # Store for use by other systems
+
+	# Reset episode statistics for new episode
+	_reset_episode_stats()
+
+	# Reset EnemyMetaAI state for new episode
+	if enemy_meta_ai:
+		enemy_meta_ai.reset()
 
 	# Delegate to episode manager for full reset
 	# Use arrays to pass base references (allows EpisodeManager to update them)
@@ -338,3 +426,18 @@ func _ai_send_current_observation() -> void:
 	)
 	obs["policy_changed"] = false  # Clear flag for new episode
 	AiServer.send_observation(obs)
+
+func _reset_episode_stats() -> void:
+	"""Reset episode statistics for a new episode."""
+	episode_stats = {
+		"ally_damage_to_units": 0,
+		"enemy_damage_to_units": 0,
+		"ally_damage_to_base": 0,
+		"enemy_damage_to_base": 0,
+		"ally_policy": "",
+		"enemy_policy": "",
+		"outcome": "",
+		"ally_units_left": 0,
+		"enemy_units_left": 0,
+		"episode_steps": 0
+	}
