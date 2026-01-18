@@ -279,7 +279,7 @@ if __name__ == "__main__":
     # Checkpoint loading configuration
     # Priority: latest numbered checkpoint > checkpoint_3policy > train from scratch
     # IMPORTANT: Set to True when policy configuration changes (policy names/count)
-    skip_checkpoint_loading = True  # Set to False to load from checkpoint (policies must match!)
+    skip_checkpoint_loading = False  # Set to False to load from checkpoint (policies must match!)
 
     # Determine which checkpoint to load
     checkpoint_to_load = None

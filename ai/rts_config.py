@@ -124,7 +124,7 @@ DEFAULT_TIMEOUT = 5.0  # Socket timeout in seconds
 
 # Learning rate - REDUCED from 3e-4 to 1e-4 for better convergence
 # High entropy after 10+ hours suggests learning rate may be too high
-LEARNING_RATE = 3e-4
+LEARNING_RATE = 1e-5
 
 # Entropy coefficient - controls exploration vs exploitation
 # Lower values encourage more deterministic policies (less random exploration)

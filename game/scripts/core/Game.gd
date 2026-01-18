@@ -97,23 +97,29 @@ func _ready() -> void:
 	# Initialize episode manager
 	episode_manager = EpisodeManager.new(GameConfig.MAX_EPISODE_STEPS)
 
+	# Get the first matchup for episode 0
+	var first_matchup = episode_manager.get_first_matchup()
+	var ally_policy = first_matchup[0]
+	var enemy_policy = first_matchup[1]
+	print("Game: First matchup - allies: ", ally_policy, ", enemies: ", enemy_policy)
+
 	# Initialize player controller for manual control
 	player_controller = PlayerController.new(self)
 
-	# Spawn bases and units
+	# Spawn bases and units with assigned policies
 	var bases = spawn_manager.spawn_bases(episode_manager.get_spawn_sides_swapped())
 	ally_base = bases["ally_base"]
 	enemy_base = bases["enemy_base"]
 
-	init_units()
+	init_units(ally_policy, enemy_policy)
 	get_units()
 
 	# IMPORTANT: Add this node to the "game" group so AiServer can find it
 	add_to_group("game")
 	print("Game: Added to 'game' group")
 
-func init_units():
-	"""Initialize units container and spawn all units."""
+func init_units(ally_policy: String, enemy_policy: String):
+	"""Initialize units container and spawn all units with assigned policies."""
 	print("Game: Starting init_units()")
 
 	var units_container = get_node("Units")
@@ -124,8 +130,8 @@ func init_units():
 		add_child(units_container)
 		print("Game: Created new Units container")
 
-	# Spawn all units using spawn manager
-	spawn_manager.spawn_all_units(episode_manager.get_spawn_sides_swapped())
+	# Spawn all units using spawn manager with policy assignments
+	spawn_manager.spawn_all_units(episode_manager.get_spawn_sides_swapped(), ally_policy, enemy_policy)
 	print("Game: init_units() completed")
 
 func get_units():
