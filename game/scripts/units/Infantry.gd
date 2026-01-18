@@ -4,6 +4,7 @@ class_name Infantry
 
 func _initialize_unit_stats() -> void:
 	# Set infantry-specific stats
+	type_id = 0  # Infantry
 	max_hp = 150
 	attack_range = 80.0
 	attack_damage = 5

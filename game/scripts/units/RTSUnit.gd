@@ -71,11 +71,11 @@ var direction_change_reward: float = 0.0  # Reward/penalty for direction consist
 # Policy change tracking - triggers episode reset when changed via UI
 var policy_changed_this_step: bool = false
 
-# Attack sound effect
+# Attack sound effects (per unit type)
 var _attack_sound_player: AudioStreamPlayer2D = null
-static var _attack_sound: AudioStream = null
+static var _attack_sounds: Dictionary = {}  # type_id -> AudioStream
 static var _last_sound_time: float = 0.0  # Global cooldown to prevent audio overload
-const SOUND_COOLDOWN: float = 0.05  # Minimum 50ms between any gunshot sounds
+const SOUND_COOLDOWN: float = 0.065  # Minimum 65ms between any gunshot sounds
 
 func _ready() -> void:
 	# Set unit-specific stats first
@@ -107,18 +107,21 @@ func _ready() -> void:
 	target = global_position
 	target_click = global_position  # Initialize both targets to current position
 
-	# Setup attack sound (loaded once, shared across all units)
-	if _attack_sound == null:
-		_attack_sound = load("res://RTSAssets/SFX/cannon-shot-6153.wav")
+	# Setup attack sounds (loaded once, shared across all units)
+	if _attack_sounds.is_empty():
+		_attack_sounds[0] = load("res://RTSAssets/SFX/single-pistol-gunshot-42-40781.wav")  # Infantry
+		_attack_sounds[1] = load("res://RTSAssets/SFX/shot-and-reload-6158.wav")            # Sniper
+		_attack_sounds[2] = load("res://RTSAssets/SFX/cannon-shot-6153.wav")                # Heavy
+
 	_attack_sound_player = AudioStreamPlayer2D.new()
-	_attack_sound_player.stream = _attack_sound
+	_attack_sound_player.stream = _attack_sounds.get(type_id, _attack_sounds[0])
 	_attack_sound_player.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
 	add_child(_attack_sound_player)
 
 
 func _play_attack_sound() -> void:
 	"""Play attack sound with pitch randomization and global cooldown."""
-	if _attack_sound_player == null or _attack_sound == null:
+	if _attack_sound_player == null:
 		return
 
 	# Global cooldown to prevent audio overload (50ms between any shots)
@@ -129,8 +132,11 @@ func _play_attack_sound() -> void:
 
 	# Pitch randomization (±10%) to reduce sonic fatigue
 	_attack_sound_player.pitch_scale = randf_range(0.9, 1.1)
-	# Slight volume variation (±15%)
-	_attack_sound_player.volume_db = randf_range(-3.0, 0.0)
+	# Volume per unit type: Infantry quiet, Sniper/Heavy louder (+12dB)
+	if type_id == 0:  # Infantry
+		_attack_sound_player.volume_db = randf_range(-29.0, -26.0)
+	else:  # Sniper, Heavy
+		_attack_sound_player.volume_db = randf_range(-17.0, -14.0)
 	_attack_sound_player.play()
 
 
