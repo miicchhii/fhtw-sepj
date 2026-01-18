@@ -1,7 +1,8 @@
-[gd_scene load_steps=10 format=4 uid="uid://ec25jx2deodc"]
+[gd_scene load_steps=11 format=4 uid="uid://ec25jx2deodc"]
 
 [ext_resource type="Script" uid="uid://thu4rg7uqytk" path="res://scripts/core/Game.gd" id="1_1fp7r"]
 [ext_resource type="Texture2D" uid="uid://47p4cy0ufs86" path="res://RTSAssets/ground.png" id="2_6m72w"]
+[ext_resource type="Script" uid="uid://ck0gps2d5a2fd" path="res://scripts/global/hotkeys.gd" id="2_j2gmx"]
 [ext_resource type="Script" uid="uid://b5gh4c1egnp25" path="res://scripts/ui/camera.gd" id="2_v5dby"]
 [ext_resource type="PackedScene" uid="uid://dg8jjjtik1cqu" path="res://scenes/ui/UI_new.tscn" id="3_bq33v"]
 [ext_resource type="PackedScene" uid="uid://d1ycj2660jnj2" path="res://scenes/buildings/Ressource.tscn" id="6_t5ptc"]
@@ -21,6 +22,10 @@ sources/0 = SubResource("TileSetAtlasSource_fj7yv")
 [node name="World" type="Node2D"]
 y_sort_enabled = true
 script = ExtResource("1_1fp7r")
+
+[node name="Hotkeys" type="Node" parent="."]
+process_mode = 3
+script = ExtResource("2_j2gmx")
 
 [node name="Camera" type="Camera2D" parent="."]
 position = Vector2(1280, 720)
@@ -46,7 +51,27 @@ y_sort_enabled = true
 y_sort_enabled = true
 
 [node name="Ressource" parent="Objects" instance=ExtResource("6_t5ptc")]
-position = Vector2(450.99988, 142.99998)
+position = Vector2(593, 236.99998)
+scale = Vector2(4.92, 4.92)
+
+[node name="Ressource2" parent="Objects" instance=ExtResource("6_t5ptc")]
+position = Vector2(577, 1085)
+scale = Vector2(4.92, 4.92)
+
+[node name="Ressource3" parent="Objects" instance=ExtResource("6_t5ptc")]
+position = Vector2(1766.0001, 376)
+scale = Vector2(4.92, 4.92)
+
+[node name="Ressource4" parent="Objects" instance=ExtResource("6_t5ptc")]
+position = Vector2(1979.9999, 1085)
+scale = Vector2(4.92, 4.92)
+
+[node name="Ressource5" parent="Objects" instance=ExtResource("6_t5ptc")]
+position = Vector2(1229.9998, 959)
+scale = Vector2(4.92, 4.92)
+
+[node name="Ressource6" parent="Objects" instance=ExtResource("6_t5ptc")]
+position = Vector2(1155, 500.99994)
 scale = Vector2(4.92, 4.92)
 
 [node name="coinHouse" parent="Objects" instance=ExtResource("7_j2gmx")]

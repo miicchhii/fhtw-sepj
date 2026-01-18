@@ -25,6 +25,14 @@ enum UnitType {
 	HEAVY
 }
 
+func reset() -> void:
+	# Reset game-wide state to initial values
+	Uranium = 0
+	Metal = 0
+	next_unit_id = 1
+	SelectedUnit = null
+
+
 func spawnUnit(pos, is_enemy: bool = false, unit_type: UnitType = UnitType.INFANTRY):
 	var unit_scene
 	var unit_type_name = ""
