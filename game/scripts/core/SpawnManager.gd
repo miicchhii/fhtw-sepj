@@ -109,7 +109,7 @@ func spawn_bases(swap_spawn_sides: bool) -> Dictionary:
 		"enemy_base": enemy_base
 	}
 
-func spawn_all_units(swap_spawn_sides: bool, ally_policy: String, enemy_policy: String) -> void:
+func spawn_all_units(swap_spawn_sides: bool, ally_policy: String, enemy_policy: String, skip_ai_units: bool = false) -> void:
 	"""
 	Spawn all ally and enemy units with a mix of infantry and snipers.
 
@@ -130,7 +130,12 @@ func spawn_all_units(swap_spawn_sides: bool, ally_policy: String, enemy_policy: 
 		swap_spawn_sides: True to swap ally/enemy spawn halves
 		ally_policy: Policy ID to assign to ally units
 		enemy_policy: Policy ID to assign to enemy units
+		skip_ai_units: True to skip AI unit spawning (inference mode)
 	"""
+	# In inference mode, skip AI unit spawning (player will place units manually)
+	if skip_ai_units:
+		print("SpawnManager: Skipping AI unit spawning (inference mode)")
+		return
 	var spawnbox_start_x_1 = GameConfig.UNIT_SPAWNBOX_X_LEFT
 	var spawnbox_start_y_1 = GameConfig.UNIT_SPAWNBOX_Y
 

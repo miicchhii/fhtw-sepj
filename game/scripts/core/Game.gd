@@ -69,6 +69,11 @@ var penalty_base_damage_per_unit: float = GameConfig.PENALTY_BASE_DAMAGE_PER_UNI
 var reward_tactical_spacing: float = GameConfig.REWARD_TACTICAL_SPACING
 var tactical_spacing_threshold: float = GameConfig.TACTICAL_SPACING_THRESHOLD
 
+# Training mode (controls matchup rotation and unit spawning)
+# True = training mode (rotate matchups, spawn AI units)
+# False = inference mode (fixed matchup, skip AI unit spawning)
+var training_mode: bool = true
+
 func _ready() -> void:
 	# Initialize reward calculator (loads policy configs from JSON)
 	reward_calculator = RewardCalculator.new()
@@ -196,8 +201,10 @@ func _physics_process(_delta: float) -> void:
 
 			AiServer.send_observation(obs)
 
-			var game_won = (enemies_alive == 0 and allies_alive > 0) or enemy_base_destroyed
-			var game_lost = (allies_alive == 0 and enemies_alive > 0) or ally_base_destroyed
+			# Game only ends on base destruction (not unit elimination)
+			# This allows training to continue even if one team's units are wiped out
+			var game_won = enemy_base_destroyed
+			var game_lost = ally_base_destroyed
 
 			# Check for episode end condition using EpisodeManager
 			var should_end_episode = episode_manager.should_end_episode(ai_step, game_won, game_lost)
@@ -241,7 +248,7 @@ func _physics_process(_delta: float) -> void:
 				print("Episode ended at ai_step ", ai_step, " (physics_tick ", tick, ") - waiting for Python reset...")
 				# Don't auto-reset here - let Python handle the reset via _ai_request_reset()
 
-func _ai_request_reset() -> void:
+func _ai_request_reset(p_training_mode: bool = true) -> void:
 	"""
 	Reset the game episode when called by Python training system.
 
@@ -250,20 +257,20 @@ func _ai_request_reset() -> void:
 
 	Episode termination conditions:
 	- ai_step >= max_episode_steps (default 500)
-	- All allies dead (game lost)
-	- All enemies dead (game won)
 	- Base destroyed (immediate win/loss)
 
-	Spawn side alternation:
+	Spawn side alternation (training mode only):
 	- Episode 0, 2, 4... (even): allies left, enemies right
 	- Episode 1, 3, 5... (odd): allies right, enemies left
 
-	This prevents the AI from learning position-dependent strategies like
-	"always move right" instead of "move toward enemies".
+	Training mode controls:
+	- Matchup rotation (training) vs fixed matchup (inference)
+	- AI unit spawning (training) vs skip spawning (inference)
 	"""
-	print("Game: Reset requested, delegating to EpisodeManager...")
+	print("Game: Reset requested (training_mode=", p_training_mode, "), delegating to EpisodeManager...")
 	tick = 0
 	ai_step = 0
+	training_mode = p_training_mode  # Store for use by other systems
 
 	# Delegate to episode manager for full reset
 	# Use arrays to pass base references (allows EpisodeManager to update them)
@@ -276,7 +283,8 @@ func _ai_request_reset() -> void:
 		self,  # game_node
 		ally_base_ref,
 		enemy_base_ref,
-		AiServer
+		AiServer,
+		training_mode  # Pass training mode to episode manager
 	)
 
 	# Update local references from EpisodeManager
