@@ -1,5 +1,5 @@
 {
-	"ally_team_policy": "policy_aggressive_2",
+	"ally_team_policy": "policy_aggressive_1",
 	"default_policy": "policy_baseline",
 	"enemy_team_policy": "policy_baseline",
 	"policies": {
@@ -61,7 +61,7 @@
 				"team_victory": 50.0,
 				"unit_kill": 35.0
 			},
-			"trainable": true
+			"trainable": false
 		},
 		"policy_baseline": {
 			"description": "Balanced baseline policy for comparison",
