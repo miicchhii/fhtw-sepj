@@ -50,14 +50,14 @@ position = Vector2(450.99988, 142.99998)
 scale = Vector2(4.92, 4.92)
 
 [node name="coinHouse" parent="Objects" instance=ExtResource("7_j2gmx")]
-position = Vector2(213, 783)
+position = Vector2(211, 297.00006)
 scale = Vector2(8.713287, 8.713287)
 
 [node name="Houses" type="Node2D" parent="."]
 y_sort_enabled = true
 
 [node name="robo_shop" parent="Houses" instance=ExtResource("7_bq33v")]
-position = Vector2(239.99998, 318)
+position = Vector2(214.00002, 769)
 scale = Vector2(1.60395, 1.60395)
 
 [node name="Enemies" type="Node2D" parent="."]
