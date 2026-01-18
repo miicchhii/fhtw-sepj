@@ -75,6 +75,7 @@ var tactical_spacing_threshold: float = GameConfig.TACTICAL_SPACING_THRESHOLD
 var training_mode: bool = true
 
 func _ready() -> void:
+
 	# Initialize reward calculator (loads policy configs from JSON)
 	reward_calculator = RewardCalculator.new()
 
@@ -122,6 +123,13 @@ func _ready() -> void:
 	# IMPORTANT: Add this node to the "game" group so AiServer can find it
 	add_to_group("game")
 	print("Game: Added to 'game' group")
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("reset_game"):
+		Global.reset()
+		get_tree().reload_current_scene()
+
+
 
 func init_units(ally_policy: String, enemy_policy: String):
 	"""Initialize units container and spawn all units with assigned policies."""

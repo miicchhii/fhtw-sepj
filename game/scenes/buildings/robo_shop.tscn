@@ -29,6 +29,7 @@ scale = Vector2(0.09445325, 0.09445325)
 texture = ExtResource("2_fciky")
 
 [node name="Selected" type="Panel" parent="."]
+visible = false
 offset_left = -50.0
 offset_top = -95.00001
 offset_right = -24.0
