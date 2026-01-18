@@ -63,6 +63,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         self.episode_step = 0
         self.episode_ended = False
         self._soft_reset_pending = False  # If True, next reset() preserves game state
+        self.inference_mode = env_config.get("inference_mode", False)  # Suppress debug logs
 
         # Observation and action spaces (imported from central config)
         # See rts_config.py for detailed space documentation
@@ -526,8 +527,8 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
                 reward = float(agent_rewards.get(agent_id, 0.0))
                 rewards[agent_id] = reward
 
-                # Optional: Log significant combat rewards for debugging
-                if abs(reward) > 3.0:  # Log rewards above normal positional range
+                # Optional: Log significant combat rewards for debugging (skip in inference mode)
+                if not self.inference_mode and abs(reward) > 3.0:
                     # Show the policy that was actually used by policy_mapping_fn
                     actual_policy = getattr(GodotRTSMultiAgentEnv, '_last_policy_mapping', {}).get(agent_id, "unknown")
                     expected_policy = self.agent_to_policy.get(agent_id, "unknown")
