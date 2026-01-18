@@ -47,8 +47,8 @@ const HEAVY_SPAWN_INTERVAL: int = 50  # Spawn 1 heavy unit every N units
 # =============================================================================
 
 # Base spawn margins (safe distance from map edges)
-const BASE_SPAWN_MARGIN_X: float = 150.0  # Horizontal margin for base placement
-const BASE_SPAWN_MARGIN_Y: float = 150.0  # Vertical margin for base placement
+const BASE_SPAWN_MARGIN_X: float = 225.0  # Horizontal margin for base placement
+const BASE_SPAWN_MARGIN_Y: float = 225.0  # Vertical margin for base placement
 
 # Unit spawn box positions (where unit formations start)
 const UNIT_SPAWNBOX_X_LEFT: float = 50.0    # X position for left-side spawn

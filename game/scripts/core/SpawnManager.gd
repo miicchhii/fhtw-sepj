@@ -38,76 +38,43 @@ func _init(
 
 func spawn_bases(swap_spawn_sides: bool) -> Dictionary:
 	"""
-	Spawn ally and enemy bases randomly within their respective halves of the map.
+	Spawn ally and enemy bases at fixed positions.
 
-	Map halves (with spawn side alternation):
-	- Normal (even episodes): Ally left half, Enemy right half
-	- Swapped (odd episodes): Ally right half, Enemy left half
+	- Player/Ally base: bottom-left
+	- Enemy base: bottom-right
 
-	Random placement ensures varied strategic scenarios and prevents
-	position-specific learning.
-
-	Args:
-		swap_spawn_sides: True to swap ally/enemy spawn halves
-
-	Returns:
-		Dictionary with keys:
-		- ally_base: Spawned ally base node
-		- enemy_base: Spawned enemy base node
+	Note: swap_spawn_sides is kept for compatibility but ignored.
 	"""
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-
 	# Define safe margins from map edges (from GameConfig)
 	var margin_x = GameConfig.BASE_SPAWN_MARGIN_X
 	var margin_y = GameConfig.BASE_SPAWN_MARGIN_Y
 
-	# Calculate team halves
-	var half_map_x = GameConfig.get_half_map_width()
+	# Fixed bottom corners (with margins)
+	var ally_base_x: float = margin_x
+	var ally_base_y: float = map_h - margin_y
+	var enemy_base_x: float = map_w - margin_x
+	var enemy_base_y: float = margin_y
 
-	# Determine which half each team spawns in
-	var ally_x_min: float
-	var ally_x_max: float
-	var enemy_x_min: float
-	var enemy_x_max: float
-
-	if not swap_spawn_sides:
-		# Normal: Ally left, Enemy right
-		ally_x_min = margin_x
-		ally_x_max = half_map_x - margin_x
-		enemy_x_min = half_map_x + margin_x
-		enemy_x_max = map_w - margin_x
-	else:
-		# Swapped: Ally right, Enemy left
-		ally_x_min = half_map_x + margin_x
-		ally_x_max = map_w - margin_x
-		enemy_x_min = margin_x
-		enemy_x_max = half_map_x - margin_x
-
-	# Random positions within team halves
-	var ally_base_x = rng.randf_range(ally_x_min, ally_x_max)
-	var ally_base_y = rng.randf_range(margin_y, map_h - margin_y)
-	var enemy_base_x = rng.randf_range(enemy_x_min, enemy_x_max)
-	var enemy_base_y = rng.randf_range(margin_y, map_h - margin_y)
 
 	# Spawn ally base
 	var ally_base = base_scene.instantiate()
 	ally_base.is_enemy = false
 	ally_base.position = Vector2(ally_base_x, ally_base_y)
 	parent_node.add_child(ally_base)
-	print("SpawnManager: Spawned ally base at (", ally_base_x, ", ", ally_base_y, ")")
+	print("SpawnManager: Spawned ally base at (", ally_base_x, ", ", ally_base_y, ") [FIXED]")
 
 	# Spawn enemy base
 	var enemy_base = base_scene.instantiate()
 	enemy_base.is_enemy = true
 	enemy_base.position = Vector2(enemy_base_x, enemy_base_y)
 	parent_node.add_child(enemy_base)
-	print("SpawnManager: Spawned enemy base at (", enemy_base_x, ", ", enemy_base_y, ")")
+	print("SpawnManager: Spawned enemy base at (", enemy_base_x, ", ", enemy_base_y, ") [FIXED]")
 
 	return {
 		"ally_base": ally_base,
 		"enemy_base": enemy_base
 	}
+
 
 func spawn_all_units(swap_spawn_sides: bool) -> void:
 	"""
