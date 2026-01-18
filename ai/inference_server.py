@@ -4,8 +4,9 @@
 # This eliminates the lag caused by training between episodes.
 #
 # Usage:
-#   python inference_server.py                              # Uses latest checkpoint
-#   python inference_server.py --checkpoint checkpoint_050  # Specific checkpoint
+#   python inference_server.py                              # Uses production checkpoint
+#   python inference_server.py --checkpoint production_v01  # Specific version
+#   python inference_server.py --checkpoint checkpoint_050  # Training checkpoint
 
 import argparse
 import os
@@ -33,8 +34,8 @@ def find_checkpoint(checkpoint_name: str = None) -> str:
     Find checkpoint to load.
 
     Args:
-        checkpoint_name: Optional specific checkpoint name (e.g., "checkpoint_050")
-                        If None, uses the latest checkpoint.
+        checkpoint_name: Optional specific checkpoint name (e.g., "production_v01")
+                        If None, uses the "production" checkpoint.
 
     Returns:
         Absolute path to checkpoint directory
@@ -51,7 +52,12 @@ def find_checkpoint(checkpoint_name: str = None) -> str:
             return checkpoint_path
         raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-    # Find latest checkpoint
+    # Default: use production checkpoint
+    production_path = os.path.join(checkpoint_dir, "production")
+    if os.path.exists(production_path):
+        return production_path
+
+    # Fallback: find latest numbered checkpoint
     if not os.path.exists(checkpoint_dir):
         raise FileNotFoundError(f"Checkpoint directory not found: {checkpoint_dir}")
 
@@ -62,6 +68,7 @@ def find_checkpoint(checkpoint_name: str = None) -> str:
     # Sort by creation time
     checkpoints.sort(key=lambda x: os.path.getctime(os.path.join(checkpoint_dir, x)))
     latest = os.path.join(checkpoint_dir, checkpoints[-1])
+    print(f"Warning: No 'production' checkpoint found, falling back to {latest}")
     return latest
 
 
