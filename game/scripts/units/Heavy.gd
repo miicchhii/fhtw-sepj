@@ -3,7 +3,8 @@ extends RTSUnit
 class_name Heavy
 
 func _initialize_unit_stats() -> void:
-	# Set infantry-specific stats
+	# Set heavy-specific stats
+	type_id = 2  # Heavy
 	max_hp = 300
 	attack_range = 100.0
 	attack_damage = 10

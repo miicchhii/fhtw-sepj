@@ -71,6 +71,12 @@ var direction_change_reward: float = 0.0  # Reward/penalty for direction consist
 # Policy change tracking - triggers episode reset when changed via UI
 var policy_changed_this_step: bool = false
 
+# Attack sound effects (per unit type)
+var _attack_sound_player: AudioStreamPlayer2D = null
+static var _attack_sounds: Dictionary = {}  # type_id -> AudioStream
+static var _last_sound_time: float = 0.0  # Global cooldown to prevent audio overload
+const SOUND_COOLDOWN: float = 0.065  # Minimum 65ms between any gunshot sounds
+
 func _ready() -> void:
 	# Set unit-specific stats first
 	_initialize_unit_stats()
@@ -100,6 +106,39 @@ func _ready() -> void:
 	print("Unit ", unit_id, " added to groups: ", get_groups())
 	target = global_position
 	target_click = global_position  # Initialize both targets to current position
+
+	# Setup attack sounds (loaded once, shared across all units)
+	if _attack_sounds.is_empty():
+		_attack_sounds[0] = load("res://RTSAssets/SFX/single-pistol-gunshot-42-40781.wav")  # Infantry
+		_attack_sounds[1] = load("res://RTSAssets/SFX/shot-and-reload-6158.wav")            # Sniper
+		_attack_sounds[2] = load("res://RTSAssets/SFX/cannon-shot-6153.wav")                # Heavy
+
+	_attack_sound_player = AudioStreamPlayer2D.new()
+	_attack_sound_player.stream = _attack_sounds.get(type_id, _attack_sounds[0])
+	_attack_sound_player.bus = "SFX" if AudioServer.get_bus_index("SFX") >= 0 else "Master"
+	add_child(_attack_sound_player)
+
+
+func _play_attack_sound() -> void:
+	"""Play attack sound with pitch randomization and global cooldown."""
+	if _attack_sound_player == null:
+		return
+
+	# Global cooldown to prevent audio overload (50ms between any shots)
+	var current_time = Time.get_ticks_msec() / 1000.0
+	if current_time - _last_sound_time < SOUND_COOLDOWN:
+		return
+	_last_sound_time = current_time
+
+	# Pitch randomization (±10%) to reduce sonic fatigue
+	_attack_sound_player.pitch_scale = randf_range(0.9, 1.1)
+	# Volume per unit type: Infantry quiet, Sniper/Heavy louder (+12dB)
+	if type_id == 0:  # Infantry
+		_attack_sound_player.volume_db = randf_range(-29.0, -26.0)
+	else:  # Sniper, Heavy
+		_attack_sound_player.volume_db = randf_range(-17.0, -14.0)
+	_attack_sound_player.play()
+
 
 # Virtual function to be overridden by subclasses
 func _initialize_unit_stats() -> void:
@@ -299,8 +338,9 @@ func _physics_process(delta):
 								kills_this_step += 1
 					if has_node("AnimationPlayer"):
 						anim.play("Attack") # ok if missing
+					_play_attack_sound()
 					_atk_cd = attack_cooldown
-	
+
 		# --- Enemy units: attack ONLY when an ally is already in range ---
 	if is_enemy:
 		# clear invalid target
@@ -331,10 +371,10 @@ func _physics_process(delta):
 							kills_this_step += 1
 					if has_node("AnimationPlayer"):
 						anim.play("Attack")
+					_play_attack_sound()
 					_atk_cd = attack_cooldown
 
-		
-		
+
 func apply_damage(amount: int, attacker: RTSUnit = null) -> void:
 	var actual_damage = min(amount, hp)  # Don't count overkill damage
 	hp = max(0, hp - amount)

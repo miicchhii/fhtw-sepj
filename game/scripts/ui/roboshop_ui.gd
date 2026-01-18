@@ -1,9 +1,9 @@
 extends Control
 
 # ---------------- Config ----------------
-@export var cost_infantry: int = 30
-@export var cost_sniper:   int = 40
-@export var cost_heavy:    int = 70
+@export var cost_infantry: int = 10
+@export var cost_sniper:   int = 20
+@export var cost_heavy:    int = 30
 @export var uranium_heavy: int = 1
 
 

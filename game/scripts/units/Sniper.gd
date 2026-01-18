@@ -4,6 +4,7 @@ class_name Sniper
 
 func _initialize_unit_stats() -> void:
 	# Set sniper-specific stats
+	type_id = 1  # Sniper
 	max_hp = 80
 	attack_range = 150.0     # Much longer range
 	attack_damage = 25       # Higher damage
