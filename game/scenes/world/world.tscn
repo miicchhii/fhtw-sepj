@@ -1,6 +1,7 @@
-[gd_scene load_steps=11 format=4 uid="uid://ec25jx2deodc"]
+[gd_scene load_steps=12 format=4 uid="uid://ec25jx2deodc"]
 
 [ext_resource type="Script" uid="uid://thu4rg7uqytk" path="res://scripts/core/Game.gd" id="1_1fp7r"]
+[ext_resource type="AudioStream" uid="uid://cx1cmkwur7tmh" path="res://RTSAssets/Music/robotic-dreams-117760.ogg" id="2_1yooq"]
 [ext_resource type="Texture2D" uid="uid://47p4cy0ufs86" path="res://RTSAssets/ground.png" id="2_6m72w"]
 [ext_resource type="Script" uid="uid://ck0gps2d5a2fd" path="res://scripts/global/hotkeys.gd" id="2_j2gmx"]
 [ext_resource type="Script" uid="uid://b5gh4c1egnp25" path="res://scripts/ui/camera.gd" id="2_v5dby"]
@@ -22,6 +23,11 @@ sources/0 = SubResource("TileSetAtlasSource_fj7yv")
 [node name="World" type="Node2D"]
 y_sort_enabled = true
 script = ExtResource("1_1fp7r")
+
+[node name="BGM" type="AudioStreamPlayer2D" parent="."]
+stream = ExtResource("2_1yooq")
+volume_db = -10.0
+autoplay = true
 
 [node name="Hotkeys" type="Node" parent="."]
 process_mode = 3
