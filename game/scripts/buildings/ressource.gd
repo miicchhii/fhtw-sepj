@@ -2,7 +2,8 @@ extends StaticBody2D
 
 var totalTime = 5
 var currTime
-var units = 0
+var ally_units := 0
+var enemy_units := 0
 @onready var bar = $ProgressBar
 @onready var timer = $Timer
 
@@ -20,29 +21,35 @@ func _process(_delta: float) -> void:
 
 
 func _on_mining_area_body_entered(body: Node2D) -> void:
-	print("Body entered mining area: ", body.name, " | Type: ", body.get_class())
-	print("Groups: ", body.get_groups())
-
 	# Only detect CharacterBody2D (units), not StaticBody2D (resources)
 	if body is CharacterBody2D and body.is_in_group("units"):
-		units += 1
+		# Your units have is_enemy (used in bases), so use that here too
+		if body.is_enemy:
+			enemy_units += 1
+		else:
+			ally_units += 1
+
 		startMining()
-		print("Unit started mining: ", body.unit_id, " (total miners: ", units, ")")
-	else:
-		print("Body is NOT a unit or not in units group")
+		print("Unit started mining: ", body.unit_id, " | ally=", ally_units, " enemy=", enemy_units)
+
 
 func _on_mining_area_body_exited(body: Node2D) -> void:
-	# Only process CharacterBody2D units leaving
 	if body is CharacterBody2D and body.is_in_group("units"):
-		units -= 1
-		if units <= 0:
+		if body.is_enemy:
+			enemy_units -= 1
+		else:
+			ally_units -= 1
+
+		if ally_units + enemy_units <= 0:
 			timer.stop()
 			print("All units left mining area, stopping timer")
-		print("Unit left mining: ", body.unit_id, " (remaining miners: ", units, ")")
+
+		print("Unit left mining: ", body.unit_id, " | ally=", ally_units, " enemy=", enemy_units)
+
 
 
 func _on_timer_timeout() -> void:
-	var miningSpeed = 1*units
+	var miningSpeed = (ally_units + enemy_units)
 	currTime -= miningSpeed
 	var tween = get_tree().create_tween()
 	tween.tween_property(bar, "value", currTime, 0.5).set_trans(Tween.TRANS_LINEAR)
@@ -51,5 +58,12 @@ func startMining():
 	timer.start()
 	
 func ressourceMined():
-	Global.Uranium += 1
+	# Only the player/ally side increases Global.Uranium
+	# (Enemy mining should NOT give the player uranium.)
+	if ally_units > 0 and enemy_units == 0:
+		Global.Uranium += 1
+		print("Uranium mined by ALLY. Global.Uranium =", Global.Uranium)
+	else:
+		print("Uranium mined by ENEMY or contested. No uranium awarded to player.")
+
 	queue_free()
