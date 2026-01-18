@@ -4,7 +4,7 @@ Central configuration for RTS Multi-Agent RL Training
 This module defines the single source of truth for observation/action spaces
 and other shared configuration between the training script and environment.
 
-IMPORTANT: Both train_rllib_ppo_simple.py and godot_multi_env.py import from this file
+IMPORTANT: Both training_server.py and godot_multi_env.py import from this file
 to ensure space definitions stay synchronized.
 """
 

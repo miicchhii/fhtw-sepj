@@ -14,7 +14,7 @@ This project implements a multi-agent reinforcement learning system where AI age
 - **Communication**: TCP socket connection between Godot and Python training
 
 ### Key Files
-- `ai/train_rllib_ppo_simple.py`: Main training script with PPO configuration and policy management
+- `ai/training_server.py`: Main training script with PPO configuration and policy management
 - `ai/godot_multi_env.py`: Multi-agent environment wrapper for Godot communication
 - `game/scripts/core/Game.gd`: Main game controller with reward calculation and episode management
 - `game/scripts/units/RTSUnit.gd`: Base unit class with combat, movement, and tracking
@@ -38,12 +38,12 @@ This project implements a multi-agent reinforcement learning system where AI age
 2. Start training:
    ```bash
    cd ai
-   .venv/Scripts/python.exe train_rllib_ppo_simple.py
+   .venv/Scripts/python.exe training_server.py
    ```
 
 ### Development Commands
 - **Install dependencies**: `cd ai && .venv/Scripts/pip install -r requirements.txt`
-- **Run training with timeout**: `cd ai && timeout 60 .venv/Scripts/python.exe train_rllib_ppo_simple.py`
+- **Run training with timeout**: `cd ai && timeout 60 .venv/Scripts/python.exe training_server.py`
 - **Check Godot connection**: Verify console shows "AiServer listening on 127.0.0.1:5555"
 
 ## Current Configuration
@@ -213,7 +213,7 @@ Godot sends `policy_id` field in unit observations:
 - **Godot**: `game/scripts/units/RTSUnit.gd` - add `policy_id: String` field
 - **Godot**: `game/scripts/core/Game.gd:173-188` - include `policy_id` in observations
 - **Python**: `ai/godot_multi_env.py` - track `self.agent_to_policy` mapping
-- **Python**: `ai/train_rllib_ppo_simple.py` - define multiple policies, dynamic `policy_mapping_fn()`
+- **Python**: `ai/training_server.py` - define multiple policies, dynamic `policy_mapping_fn()`
 
 ### Advantages
 - ✅ Stable unit IDs throughout lifetime
@@ -227,7 +227,7 @@ Godot sends `policy_id` field in unit observations:
 - Multiple policies can be defined and trained simultaneously
 - Unit IDs remain stable identifiers throughout lifetime
 - **Dynamic policy switching**: Call `unit.set_policy("policy_name")` to change at runtime
-- Configure trainable vs frozen policies in `train_rllib_ppo_simple.py`
+- Configure trainable vs frozen policies in `training_server.py`
 - Policy assignment defaults to team-based (allies vs enemies use different policies)
 
 ### How It Works
