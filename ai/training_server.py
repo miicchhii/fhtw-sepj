@@ -1,4 +1,4 @@
-# train_rllib_ppo_simple.py - Multi-policy PPO training for Godot RTS units
+# training_server.py - Multi-policy PPO training for Godot RTS units
 #
 # Loads policy configurations from JSON (single source of truth shared with Godot).
 # Each policy can have:
@@ -17,6 +17,42 @@ from ray.rllib.policy.policy import PolicySpec
 from godot_multi_env import GodotRTSMultiAgentEnv
 from policy_manager import PolicyManager
 import os
+import argparse
+import logging
+
+# Suppress verbose Ray/RLlib logging
+logging.getLogger("ray").setLevel(logging.WARNING)
+logging.getLogger("ray.rllib").setLevel(logging.WARNING)
+
+# =============================================================================
+# Command Line Arguments
+# =============================================================================
+
+parser = argparse.ArgumentParser(description="RTS Multi-Agent PPO Training Server")
+parser.add_argument("-v", "--verbose", action="store_true",
+                    help="Enable verbose output (debug logging)")
+parser.add_argument("-q", "--quiet", action="store_true",
+                    help="Minimal output (only errors and checkpoints)")
+# Use parse_known_args to ignore PyCharm/IDE arguments
+args, _ = parser.parse_known_args()
+
+# Verbosity levels: quiet < normal < verbose
+VERBOSE = args.verbose
+QUIET = args.quiet
+
+def log(msg, level="normal"):
+    """Print message based on verbosity level.
+
+    Levels:
+    - "debug": Only shown with --verbose
+    - "normal": Shown unless --quiet
+    - "important": Always shown
+    """
+    if level == "debug" and not VERBOSE:
+        return
+    if level == "normal" and QUIET:
+        return
+    print(msg)
 
 # Import central configuration
 from rts_config import (
@@ -38,6 +74,10 @@ from rts_config import (
     DEFAULT_PORT,
     DEFAULT_TIMEOUT
 )
+
+# =============================================================================
+# Policy Configuration
+# =============================================================================
 
 # Load policy configurations from JSON
 policy_manager = PolicyManager()
@@ -69,11 +109,11 @@ for policy_id in policy_manager.get_policy_ids():
         config={"model": model_config}
     )
 
-print(f"\n=== Configured {len(POLICIES)} policies for training ===")
+log(f"\n=== Configured {len(POLICIES)} policies for training ===")
 for policy_id in POLICIES.keys():
     net_config = policy_manager.get_network_config(policy_id)
     trainable = policy_manager.is_trainable(policy_id)
-    print(f"  {policy_id}: {net_config.get('fcnet_hiddens')} [{'TRAIN' if trainable else 'FROZEN'}]")
+    log(f"  {policy_id}: {net_config.get('fcnet_hiddens')} [{'TRAIN' if trainable else 'FROZEN'}]")
 
 def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
     """
@@ -105,7 +145,7 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
 
     # Log every 1000th call to see if this function is being called at all
     if _policy_mapping_call_count <= 10 or _policy_mapping_call_count % 1000 == 0:
-        print(f"DEBUG policy_mapping_fn called #{_policy_mapping_call_count}: agent={agent_id}, worker={worker is not None}, episode={episode is not None}")
+        log(f"DEBUG policy_mapping_fn called #{_policy_mapping_call_count}: agent={agent_id}, worker={worker is not None}, episode={episode is not None}", level="debug")
 
     from godot_multi_env import GodotRTSMultiAgentEnv
 
@@ -133,14 +173,14 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
                     policy_id = env.agent_to_policy[agent_id]
                     if policy_id in POLICIES:
                         if _policy_mapping_call_count < 5:
-                            print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from worker env)")
+                            log(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from worker env)", level="debug")
                             _policy_mapping_call_count += 1
                         # Update class-level tracking
                         GodotRTSMultiAgentEnv._last_policy_mapping[agent_id] = policy_id
                         return policy_id
         except Exception as e:
             if _policy_mapping_call_count < 5:
-                print(f"DEBUG policy_mapping_fn: worker access failed: {e}")
+                log(f"DEBUG policy_mapping_fn: worker access failed: {e}", level="debug")
 
     # Method 2: Try to get from environment's global agent_to_policy mapping
     # This works when policy_mapping_fn runs in same process as env
@@ -151,7 +191,7 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
                 policy_id = agent_to_policy[agent_id]
                 if policy_id in POLICIES:
                     if _policy_mapping_call_count < 5:
-                        print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from global mapping)")
+                        log(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from global mapping)", level="debug")
                         _policy_mapping_call_count += 1
 
                     # Store what we're returning so environment can verify it
@@ -179,7 +219,7 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
                 policy_id = info["policy_id"]
                 if policy_id in POLICIES:
                     if _policy_mapping_call_count < 5:
-                        print(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from episode info)")
+                        log(f"DEBUG policy_mapping_fn: {agent_id} -> {policy_id} (from episode info)", level="debug")
                         _policy_mapping_call_count += 1
                     return policy_id
         except (AttributeError, KeyError, TypeError) as e:
@@ -187,7 +227,7 @@ def policy_mapping_fn(agent_id, episode=None, worker=None, **kwargs):
 
     # Method 4: Fallback to default policy from config
     if _policy_mapping_call_count < 5:
-        print(f"DEBUG policy_mapping_fn: {agent_id} -> fallback to default ({policy_manager.default_policy})")
+        log(f"DEBUG policy_mapping_fn: {agent_id} -> fallback to default ({policy_manager.default_policy})", level="debug")
         _policy_mapping_call_count += 1
 
     # Store the fallback policy
@@ -226,7 +266,7 @@ if __name__ == "__main__":
             # Sort by creation time and get the latest
             checkpoints.sort(key=lambda x: os.path.getctime(os.path.join(checkpoint_dir, x)))
             latest_checkpoint = os.path.join(checkpoint_dir, checkpoints[-1])
-            print(f"Found latest checkpoint: {latest_checkpoint}")
+            log(f"Found latest checkpoint: {latest_checkpoint}")
 
             # Extract the highest iteration number from all checkpoints
             iteration_numbers = []
@@ -241,20 +281,20 @@ if __name__ == "__main__":
 
             if iteration_numbers:
                 next_iteration = max(iteration_numbers) + 1
-                print(f"Resuming from iteration {next_iteration}")
+                log(f"Resuming from iteration {next_iteration}")
             else:
                 next_iteration = 1
 
-    print("Observation space:", OBS_SPACE)
-    print("Action space:", ACT_SPACE)
+    log(f"Observation space: {OBS_SPACE}")
+    log(f"Action space: {ACT_SPACE}")
 
     # Configure which policies to train (loaded from JSON)
     # Frozen policies are used as baselines for comparison
     POLICIES_TO_TRAIN = policy_manager.get_trainable_policies()
     FROZEN_POLICIES = policy_manager.get_frozen_policies()
-    print(f"\nTraining configuration:")
-    print(f"  Trainable policies: {POLICIES_TO_TRAIN}")
-    print(f"  Frozen policies: {FROZEN_POLICIES}\n")
+    log(f"\nTraining configuration:")
+    log(f"  Trainable policies: {POLICIES_TO_TRAIN}")
+    log(f"  Frozen policies: {FROZEN_POLICIES}\n")
 
     # PPO configuration for 3-policy multi-agent RTS training
     # Architecture: Single worker with 100 agents split across 3 policies
@@ -271,6 +311,8 @@ if __name__ == "__main__":
                 "host": DEFAULT_HOST,
                 "port": DEFAULT_PORT,
                 "timeout": DEFAULT_TIMEOUT,
+                "verbose": VERBOSE,
+                "quiet": QUIET,
             },
             disable_env_checking=True,  # Skip gym space validation (custom spaces)
         )
@@ -310,11 +352,11 @@ if __name__ == "__main__":
             min_sample_timesteps_per_iteration=100,  # Minimum 100 timesteps per iteration
         )
         .debugging(
-            log_level="DEBUG",  # Verbose logging for troubleshooting
+            log_level="WARN",  # Suppress INFO spam (use DEBUG for troubleshooting)
         )
     )
 
-    print("\n" + "="*50)
+    log("\n" + "="*50)
     # Checkpoint loading configuration
     # Priority: latest numbered checkpoint > checkpoint_3policy > train from scratch
     # IMPORTANT: Set to True when policy configuration changes (policy names/count)
@@ -325,91 +367,91 @@ if __name__ == "__main__":
     if not skip_checkpoint_loading:
         if latest_checkpoint:
             checkpoint_to_load = latest_checkpoint
-            print(f"Found latest checkpoint: {checkpoint_to_load}")
+            log(f"Found latest checkpoint: {checkpoint_to_load}")
         else:
             checkpoint_3policy = os.path.abspath("./checkpoints/checkpoint_3policy")
             if os.path.exists(checkpoint_3policy):
                 checkpoint_to_load = checkpoint_3policy
-                print(f"No training checkpoints found, loading baseline: {checkpoint_3policy}")
+                log(f"No training checkpoints found, loading baseline: {checkpoint_3policy}")
             else:
-                print("No checkpoints found, training from scratch")
+                log("No checkpoints found, training from scratch")
     else:
-        print("Checkpoint loading disabled - training from scratch with new policy configuration")
+        log("Checkpoint loading disabled - training from scratch with new policy configuration")
 
-    # Build algorithm
-    print("Building algorithm...")
+    # Build algorithm with current hyperparameters from rts_config.py
+    log("Building algorithm with hyperparameters from rts_config.py:")
+    log(f"    Learning rate: {LEARNING_RATE}")
+    log(f"    Entropy coefficient: {ENTROPY_COEFF}")
+    log(f"    Gamma (discount): {GAMMA}")
+    log(f"    PPO clip param: {CLIP_PARAM}")
+    log(f"    VF clip param: {VF_CLIP_PARAM}")
+    log(f"    GAE lambda: {GAE_LAMBDA}")
     algo = cfg.build()
 
-    # Restore from checkpoint if available
+    # Restore trained weights from checkpoint (but keep new hyperparameters)
     if checkpoint_to_load:
-        print(f"Restoring from checkpoint: {checkpoint_to_load}")
+        log(f"Loading trained weights from checkpoint: {checkpoint_to_load}")
         try:
-            algo.restore(checkpoint_to_load)
-            print("[OK] Algorithm restored successfully!")
-            print(f"  Loaded 3 policies: LT50, GT50, frontline")
-
-            # Manually update all training hyperparameters post-restore
-            # This allows tuning hyperparameters between runs without losing progress
-            print(f"\n  Updating training hyperparameters from rts_config.py:")
-            print(f"    Learning rate: {LEARNING_RATE}")
-            print(f"    Entropy coefficient: {ENTROPY_COEFF}")
-            print(f"    Gamma (discount): {GAMMA}")
-            print(f"    PPO clip param: {CLIP_PARAM}")
-            print(f"    VF clip param: {VF_CLIP_PARAM}")
-            print(f"    GAE lambda: {GAE_LAMBDA}")
-
-            try:
-                # Update the algorithm's config object (used for future operations)
-                algo.config.training(
-                    lr=LEARNING_RATE,
-                    entropy_coeff=ENTROPY_COEFF,
-                    gamma=GAMMA,
-                    clip_param=CLIP_PARAM,
-                    vf_clip_param=VF_CLIP_PARAM,
-                    lambda_=GAE_LAMBDA,
-                )
-
-                # Access learner group and update optimizer settings directly
-                learner_group = algo.learner_group
-                if learner_group and hasattr(learner_group, '_learners'):
-                    for learner in learner_group._learners:
-                        # Update optimizer learning rate
-                        if hasattr(learner, '_optimizer') and learner._optimizer is not None:
-                            for param_group in learner._optimizer.param_groups:
-                                param_group['lr'] = LEARNING_RATE
-
-                        # Update learner config if accessible
-                        if hasattr(learner, '_hps'):
-                            learner._hps.lr = LEARNING_RATE
-                            learner._hps.entropy_coeff = ENTROPY_COEFF
-                            learner._hps.gamma = GAMMA
-                            learner._hps.clip_param = CLIP_PARAM
-                            learner._hps.vf_clip_param = VF_CLIP_PARAM
-                            learner._hps.lambda_ = GAE_LAMBDA
-
-                print("  [OK] Hyperparameters updated successfully!")
-            except Exception as e:
-                print(f"  [!] WARNING: Could not fully update hyperparameters: {e}")
-                print(f"    Training will attempt to continue anyway...")
+            # Load the checkpoint's learner state (neural network weights)
+            learner_state_dir = os.path.join(checkpoint_to_load, "learner")
+            if os.path.exists(learner_state_dir):
+                # Load learner group state (contains policy weights)
+                algo.learner_group.load_state(learner_state_dir)
+                log("[OK] Loaded trained weights from checkpoint!")
+                log(f"  Policies restored: {list(POLICIES.keys())}")
+                log("  Hyperparameters: Using NEW values from rts_config.py")
+            else:
+                # Fallback: try full restore if learner state not found separately
+                log("  Learner state dir not found, attempting full restore...", level="debug")
+                algo.restore(checkpoint_to_load)
+                log("[OK] Full checkpoint restore completed")
+                log("  Note: Hyperparameters from checkpoint (not rts_config.py)", level="important")
 
         except Exception as e:
-            print(f"[X] WARNING: Failed to restore checkpoint: {e}")
-            print("  Continuing with fresh algorithm...")
+            log(f"[X] WARNING: Failed to load checkpoint weights: {e}", level="important")
+            log("  Continuing with randomly initialized weights...", level="important")
     else:
-        print("No checkpoint to restore - training from scratch")
+        log("No checkpoint to load - training from scratch with random weights")
 
-    print("="*50 + "\n")
+    log("="*50 + "\n")
+
+    consecutive_errors = 0
+    max_consecutive_errors = 5  # Stop if too many errors in a row
 
     try:
         for i in range(20000):
             current_iteration = next_iteration + i
-            print(f"\n--- Training iteration {current_iteration} (loop {i+1}) ---")
+            log(f"\n--- Training iteration {current_iteration} (loop {i+1}) ---")
 
-            # Train for one iteration
-            result = algo.train()
+            # Train for one iteration with error recovery
+            try:
+                result = algo.train()
+                consecutive_errors = 0  # Reset on success
+            except Exception as train_error:
+                consecutive_errors += 1
+                error_msg = str(train_error)
+
+                # Check if it's a recoverable error
+                if "already had its" in error_msg and "is_done" in error_msg:
+                    log(f"WARNING: Agent done-state error (attempt {consecutive_errors}/{max_consecutive_errors})", level="important")
+                    log(f"  Error: {error_msg[:200]}...", level="important")
+                    log("  This usually means Godot sent data for an agent after episode ended.", level="important")
+                    log("  Attempting to continue training...", level="important")
+
+                    if consecutive_errors >= max_consecutive_errors:
+                        log(f"ERROR: Too many consecutive errors ({consecutive_errors}), stopping training", level="important")
+                        raise
+
+                    # Try to recover by waiting a bit
+                    import time
+                    time.sleep(1.0)
+                    continue  # Skip to next iteration
+                else:
+                    # Unknown error - re-raise
+                    raise
 
             # Extract metrics safely
-            print(f"\nIteration {current_iteration:03d} results:")
+            log(f"\nIteration {current_iteration:03d} results:")
 
             # Check different possible metric locations
             # New API puts metrics in different places
@@ -418,53 +460,53 @@ if __name__ == "__main__":
             env_runners = result.get("env_runners", {})
             if env_runners:
                 episodes = env_runners.get("episodes_this_iter", 0)
-                print(f"  Episodes collected: {episodes}")
+                log(f"  Episodes collected: {episodes}")
 
                 if episodes > 0:
                     episode_reward_mean = env_runners.get("episode_reward_mean", None)
                     if episode_reward_mean is not None:
-                        print(f"  Episode reward mean: {episode_reward_mean:.3f}")
-                        print(f"  Episode reward min: {env_runners.get('episode_reward_min', 0):.3f}")
-                        print(f"  Episode reward max: {env_runners.get('episode_reward_max', 0):.3f}")
+                        log(f"  Episode reward mean: {episode_reward_mean:.3f}")
+                        log(f"  Episode reward min: {env_runners.get('episode_reward_min', 0):.3f}")
+                        log(f"  Episode reward max: {env_runners.get('episode_reward_max', 0):.3f}")
 
                     episode_len_mean = env_runners.get("episode_len_mean", None)
                     if episode_len_mean is not None:
-                        print(f"  Episode length mean: {episode_len_mean:.1f}")
+                        log(f"  Episode length mean: {episode_len_mean:.1f}")
 
                 # Timesteps info
                 timesteps = env_runners.get("timesteps_this_iter", 0)
                 if timesteps > 0:
-                    print(f"  Timesteps collected: {timesteps}")
+                    log(f"  Timesteps collected: {timesteps}")
 
             # Also check top-level metrics (compatibility)
             if "episode_reward_mean" in result:
-                print(f"  [Top-level] Episode reward mean: {result['episode_reward_mean']:.3f}")
+                log(f"  [Top-level] Episode reward mean: {result['episode_reward_mean']:.3f}")
 
             # Training metrics
             timesteps_total = result.get("timesteps_total", 0)
             if timesteps_total > 0:
-                print(f"  Total timesteps: {timesteps_total}")
+                log(f"  Total timesteps: {timesteps_total}")
 
             num_agent_steps = result.get("num_agent_steps_trained", 0)
             if num_agent_steps > 0:
-                print(f"  Agent steps trained: {num_agent_steps}")
+                log(f"  Agent steps trained: {num_agent_steps}")
 
             # Learner metrics (new API might use different keys)
             learners = result.get("learners", {})
 
             # Debug: Print top-level keys to see where metrics are stored
             if not learners:
-                print("  DEBUG: No 'learners' key found. Top-level result keys:", list(result.keys()))
+                log("  DEBUG: No 'learners' key found. Top-level result keys: " + str(list(result.keys())), level="debug")
                 # Try alternative locations
                 if "info" in result and "learner" in result["info"]:
                     learners = result["info"]["learner"]
-                    print("  Found learners in result['info']['learner']")
+                    log("  Found learners in result['info']['learner']", level="debug")
                 elif "learner_info" in result:
                     learners = result["learner_info"]
-                    print("  Found learners in result['learner_info']")
+                    log("  Found learners in result['learner_info']", level="debug")
 
             if learners:
-                print("  Learner metrics found")
+                log("  Learner metrics found", level="debug")
 
                 # Display metrics for each policy dynamically
                 for policy_id in policy_manager.get_policy_ids():
@@ -474,36 +516,39 @@ if __name__ == "__main__":
                         display_name = policy_manager.get_display_name(policy_id)
                         label = f"{display_name} ({'TRAIN' if trainable else 'FROZEN'})"
 
-                        print(f"    [{label}]")
-                        print(f"      Policy loss: {stats.get('policy_loss', 'N/A')}")
-                        print(f"      VF loss: {stats.get('vf_loss', 'N/A')}")
-                        print(f"      Entropy: {stats.get('entropy', 'N/A')}")
-                        print(f"      Mean KL: {stats.get('mean_kl_loss', 'N/A')}")
+                        log(f"    [{label}]")
+                        log(f"      Policy loss: {stats.get('policy_loss', 'N/A')}")
+                        log(f"      VF loss: {stats.get('vf_loss', 'N/A')}")
+                        log(f"      Entropy: {stats.get('entropy', 'N/A')}")
+                        log(f"      Mean KL: {stats.get('mean_kl_loss', 'N/A')}")
 
             # Save checkpoint periodically
             if (i + 1) % 1 == 0:
-                ckpt_path = os.path.join(checkpoint_dir, f"checkpoint_{current_iteration:03d}")
+                ckpt_name = f"checkpoint_{current_iteration:03d}"
+                ckpt_path = os.path.join(checkpoint_dir, ckpt_name)
                 ckpt = algo.save(ckpt_path)
-                print(f"\n>>> Saved checkpoint: {ckpt}")
+                log(f"\n>>> Saved checkpoint: {ckpt}", level="important")
 
                 # Note: Model export not available with new RLModule API
                 # Use checkpoints for both training resume and inference
 
     except KeyboardInterrupt:
-        print("\nInterrupted by user; saving checkpoint...")
-        ckpt_path = os.path.join(checkpoint_dir, "checkpoint_interrupted")
+        log("\nInterrupted by user; saving checkpoint...", level="important")
+        ckpt_name = "checkpoint_interrupted"
+        ckpt_path = os.path.join(checkpoint_dir, ckpt_name)
         ckpt = algo.save(ckpt_path)
-        print(f"Saved checkpoint: {ckpt}")
+        log(f"Saved checkpoint: {ckpt}", level="important")
     except Exception as e:
-        print(f"\nError during training: {e}")
+        log(f"\nError during training: {e}", level="important")
         import traceback
         traceback.print_exc()
     finally:
         # Save final checkpoint
-        print("\nSaving final checkpoint...")
-        ckpt_path = os.path.join(checkpoint_dir, "checkpoint_final")
+        log("\nSaving final checkpoint...", level="important")
+        ckpt_name = "checkpoint_final"
+        ckpt_path = os.path.join(checkpoint_dir, ckpt_name)
         ckpt = algo.save(ckpt_path)
-        print(f"Final checkpoint: {ckpt}")
+        log(f"Final checkpoint: {ckpt}", level="important")
 
         algo.stop()
         ray.shutdown()
