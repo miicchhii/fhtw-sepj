@@ -15,9 +15,9 @@ class_name EnemyMetaAI
 extends Node
 
 # Spawn costs (match player costs from roboshop_ui.gd)
-const COST_INFANTRY: int = 30
-const COST_SNIPER: int = 40
-const COST_HEAVY: int = 70
+const COST_INFANTRY: int = 10
+const COST_SNIPER: int = 20
+const COST_HEAVY: int = 30
 
 # Thresholds
 const BASE_PROTECTION_RADIUS: float = 300.0
@@ -32,7 +32,7 @@ var squad_templates: Dictionary = {
 			{"type": Global.UnitType.INFANTRY, "count": 3}
 		],
 		"policy": "policy_defensive_1",
-		"cost": 90  # 3 * 30
+		"cost": 30  # 3 * 10
 	},
 	"aggro_base": {
 		"units": [
@@ -40,14 +40,14 @@ var squad_templates: Dictionary = {
 			{"type": Global.UnitType.INFANTRY, "count": 3}
 		],
 		"policy": "policy_aggressive_1",
-		"cost": 130  # 40 + 3*30
+		"cost": 50  # 20 + 3*10
 	},
 	"aggro_units": {
 		"units": [
 			{"type": Global.UnitType.INFANTRY, "count": 5}
 		],
 		"policy": "policy_aggressive_1",
-		"cost": 150  # 5 * 30
+		"cost": 50  # 5 * 10
 	}
 }
 
