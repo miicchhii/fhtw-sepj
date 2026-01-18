@@ -59,7 +59,8 @@ func request_reset(
 	game_node: Node2D,
 	ally_base_ref: Array,  # [0] contains current ally_base
 	enemy_base_ref: Array,  # [0] contains current enemy_base
-	ai_server: Node
+	ai_server: Node,
+	training_mode: bool = true  # True = rotate matchups + spawn AI units, False = fixed matchup + skip AI spawning
 ) -> void:
 	"""
 	Reset the episode when called by Python training system.
@@ -94,11 +95,12 @@ func request_reset(
 	episode_count += 1
 	swap_spawn_sides = (episode_count % 2 == 1)  # Swap on odd episodes
 
-	# Get next matchup for balanced training
-	var matchup = _get_next_matchup()
+	# Get next matchup - rotate in training mode, use fixed matchup in inference mode
+	var matchup = _get_next_matchup(training_mode)
 	var ally_policy = matchup[0]
 	var enemy_policy = matchup[1]
-	print("EpisodeManager: Next matchup - allies: ", ally_policy, ", enemies: ", enemy_policy)
+	var mode_str = "training (rotating)" if training_mode else "inference (fixed)"
+	print("EpisodeManager: Next matchup (", mode_str, ") - allies: ", ally_policy, ", enemies: ", enemy_policy)
 
 	# Remove all existing bases
 	if ally_base_ref[0] and is_instance_valid(ally_base_ref[0]):
@@ -127,7 +129,9 @@ func request_reset(
 	ally_base_ref[0] = bases["ally_base"]
 	enemy_base_ref[0] = bases["enemy_base"]
 
-	spawn_manager.spawn_all_units(swap_spawn_sides, ally_policy, enemy_policy)
+	# Skip AI unit spawning in inference mode (player will place units manually)
+	var skip_ai_units = not training_mode
+	spawn_manager.spawn_all_units(swap_spawn_sides, ally_policy, enemy_policy, skip_ai_units)
 
 	# Refresh units list in game node
 	game_node.get_units()
@@ -216,9 +220,15 @@ func _load_matchup_rotation() -> void:
 	print("  Trainable policies: ", trainable_policies.size())
 	print("  Matchups per policy: ", matchup_rotation.size() / trainable_policies.size() if trainable_policies.size() > 0 else 0)
 
-func _get_next_matchup() -> Array:
+func _get_next_matchup(training_mode: bool = true) -> Array:
 	"""
 	Get the next matchup in the rotation and advance the index.
+
+	In training mode: Rotates through all matchups for balanced training
+	In inference mode: Returns fixed first matchup (no rotation)
+
+	Args:
+		training_mode: True to rotate matchups, False for fixed matchup
 
 	Returns: [ally_policy, enemy_policy]
 	"""
@@ -226,6 +236,11 @@ func _get_next_matchup() -> Array:
 		push_error("No matchups available in rotation!")
 		return ["policy_baseline", "policy_baseline"]
 
+	# In inference mode, always return the first matchup without advancing
+	if not training_mode:
+		return matchup_rotation[0]
+
+	# In training mode, rotate through matchups
 	var matchup = matchup_rotation[current_matchup_index % matchup_rotation.size()]
 	current_matchup_index += 1
 	return matchup

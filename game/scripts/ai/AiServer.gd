@@ -63,15 +63,18 @@ func _handle_message(_peer: StreamPeerTCP, msg: Dictionary) -> void:
 	var t: String = str(msg.get("type", ""))
 	match t:
 		"_ai_request_reset":
-			print("AiServer: got RESET")
+			# Extract training_mode from message (defaults to true for backward compatibility)
+			var training_mode: bool = msg.get("training_mode", true)
+			print("AiServer: got RESET (training_mode=", training_mode, ")")
 			var game_nodes = get_tree().get_nodes_in_group("game")
 			if game_nodes.size() > 0:
 				var game = game_nodes[0]
 				if game.has_method("_ai_request_reset"):
-					game._ai_request_reset()
+					game._ai_request_reset(training_mode)
 		"_ai_request_observation":
 			# Soft reset: send current state without resetting game
-			print("AiServer: got OBSERVATION REQUEST (soft reset)")
+			var training_mode: bool = msg.get("training_mode", true)
+			print("AiServer: got OBSERVATION REQUEST (soft reset, training_mode=", training_mode, ")")
 			var game_nodes = get_tree().get_nodes_in_group("game")
 			if game_nodes.size() > 0:
 				var game = game_nodes[0]

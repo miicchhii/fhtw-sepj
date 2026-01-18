@@ -64,6 +64,7 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
         self.episode_ended = False
         self._soft_reset_pending = False  # If True, next reset() preserves game state
         self.inference_mode = env_config.get("inference_mode", False)  # Suppress debug logs
+        self.training_mode = not self.inference_mode  # True for training, False for inference
 
         # Observation and action spaces (imported from central config)
         # See rts_config.py for detailed space documentation
@@ -397,12 +398,13 @@ class GodotRTSMultiAgentEnv(MultiAgentEnv):
             print("Performing soft reset (game state preserved, new policy mappings)")
             self._soft_reset_pending = False
             # Request current observation without resetting game
-            if not self._send_message({"type": "_ai_request_observation"}):
+            if not self._send_message({"type": "_ai_request_observation", "training_mode": self.training_mode}):
                 raise RuntimeError("Failed to request observation from Godot")
         else:
             print("Resetting Godot environment...")
             # Full reset - respawn units, reset bases
-            if not self._send_message({"type": "_ai_request_reset"}):
+            # training_mode controls matchup rotation and unit spawning in Godot
+            if not self._send_message({"type": "_ai_request_reset", "training_mode": self.training_mode}):
                 raise RuntimeError("Failed to send reset command to Godot")
 
         # Wait for initial observation
