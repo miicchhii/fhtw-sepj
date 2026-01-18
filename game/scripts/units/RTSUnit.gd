@@ -64,12 +64,16 @@ var died_this_step: bool = false         # True if unit died this step
 var previous_move_direction: Vector2 = Vector2.ZERO  # Last movement direction vector
 var direction_change_reward: float = 0.0  # Reward/penalty for direction consistency
 
+# Policy change tracking - triggers episode reset when changed via UI
+var policy_changed_this_step: bool = false
+
 func _ready() -> void:
 	# Set unit-specific stats first
 	_initialize_unit_stats()
 
-	# Assign policy based on unit_id number
-	_assign_policy()
+	# Only assign policy from JSON config if not already pre-set by SpawnManager
+	if policy_id == "":
+		_assign_policy()
 
 	# mark enemies and keep them unselectable
 	if is_enemy:
@@ -154,7 +158,7 @@ func set_policy(new_policy_id: String) -> void:
 	Change this unit's AI policy at runtime.
 
 	Enables dynamic policy switching during gameplay or training.
-	The new policy takes effect on the next AI step.
+	The new policy triggers an episode reset so RLlib picks up the change.
 
 	Args:
 		new_policy_id: Name of the policy (e.g., "policy_LT50", "policy_frontline")
@@ -162,6 +166,11 @@ func set_policy(new_policy_id: String) -> void:
 	if policy_id != new_policy_id:
 		print("Unit ", unit_id, " policy changed: ", policy_id, " -> ", new_policy_id)
 		policy_id = new_policy_id
+		policy_changed_this_step = true  # Flag for episode reset
+
+func clear_policy_changed_flag() -> void:
+	"""Clear the policy changed flag after it's been processed."""
+	policy_changed_this_step = false
 
 func set_move_target(p: Vector2) -> void:
 	target = p
